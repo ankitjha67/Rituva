@@ -50,6 +50,8 @@ class _HomeShellState extends State<HomeShell> {
     try {
       api ??= await RituvaApi.create();
       final a = api!;
+      a.offline = false;      // re-probe the server on every (re)load
+      await a.reachable();    // fast-fail to the offline demo if unreachable (~2s, not ~20s of retries)
       ctx = await a.context();
       members = await a.members();
       member = await a.member(memberId);

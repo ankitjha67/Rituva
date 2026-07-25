@@ -34,7 +34,7 @@ class RituvaApi {
     return Platform.isAndroid ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
   }
 
-  static const _timeout = Duration(seconds: 6);
+  static const _timeout = Duration(seconds: 4);
 
   String baseUrl;
   bool offline = false; // true once any call has fallen back to the demo bundle
@@ -108,7 +108,22 @@ class RituvaApi {
   }
 
   // ------------------------------------------------ endpoints (live→demo) ----
+  /// Fast reachability probe (2 s) — sets [offline] so the subsequent read calls
+  /// short-circuit to the bundled demo instead of each waiting out the full timeout.
+  /// This keeps startup snappy when a configured server is unreachable.
+  Future<bool> reachable() async {
+    try {
+      final r = await http.get(_u('/health')).timeout(const Duration(seconds: 2));
+      offline = r.statusCode >= 400;
+      return !offline;
+    } catch (_) {
+      offline = true;
+      return false;
+    }
+  }
+
   Future<Map<String, dynamic>> context() async {
+    if (offline) return _localContext();
     try {
       final v = await _get('/context') as Map<String, dynamic>;
       offline = false;
@@ -123,6 +138,7 @@ class RituvaApi {
   }
 
   Future<List> members() async {
+    if (offline) return (await _bundle())['members'] as List;
     try {
       final v = await _get('/members') as List;
       offline = false;
@@ -137,6 +153,10 @@ class RituvaApi {
   }
 
   Future<Map<String, dynamic>> member(String id) async {
+    if (offline) {
+      final ms = (await _bundle())['members'] as List;
+      return ms.firstWhere((m) => m['id'] == id, orElse: () => ms.first) as Map<String, dynamic>;
+    }
     try {
       final v = await _get('/members/$id') as Map<String, dynamic>;
       offline = false;
@@ -152,6 +172,7 @@ class RituvaApi {
   }
 
   Future<Map<String, dynamic>> targets(String id) async {
+    if (offline) return _member(await _bundle(), id)['targets'] as Map<String, dynamic>;
     try {
       final v = await _get('/members/$id/targets') as Map<String, dynamic>;
       offline = false;
@@ -166,6 +187,7 @@ class RituvaApi {
   }
 
   Future<Map<String, dynamic>> createPlan(String id, {int days = 7, String? start}) async {
+    if (offline) return _member(await _bundle(), id)['plan'] as Map<String, dynamic>;
     try {
       final v = await _post('/plans', {'member_id': id, 'days': days, if (start != null) 'start': start})
           as Map<String, dynamic>;
