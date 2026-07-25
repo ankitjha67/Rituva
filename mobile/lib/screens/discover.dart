@@ -16,6 +16,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   List all = [];
   bool loading = true, offline = false;
   String region = 'all';
+  String dietSel = 'all';
 
   @override
   void initState() {
@@ -58,33 +59,49 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       return const Center(child: CircularProgressIndicator(color: R.gold));
     }
     const regions = ['all', 'north', 'south', 'east', 'west'];
-    final list = region == 'all' ? all : all.where((r) => r['region'] == region).toList();
+    const diets = ['all', 'veg', 'nonveg', 'vegan', 'jain', 'gluten_free'];
+    const dietLabel = {
+      'all': 'All', 'veg': 'Veg', 'nonveg': 'Non-veg', 'vegan': 'Vegan',
+      'jain': 'Jain', 'gluten_free': 'Gluten-free'
+    };
+    final list = all.where((r) {
+      final okR = region == 'all' || r['region'] == region;
+      final okD = dietSel == 'all' || ((r['diet'] as List?)?.contains(dietSel) ?? true);
+      return okR && okD;
+    }).toList();
+    Widget chipRow(List<String> opts, String sel, void Function(String) onSel, String Function(String) lbl) =>
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: opts
+                .map((o) => Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(lbl(o)),
+                        selected: sel == o,
+                        selectedColor: R.gold.withOpacity(.25),
+                        onSelected: (_) => onSel(o),
+                      ),
+                    ))
+                .toList(),
+          ),
+        );
     return Column(
       children: [
         if (offline)
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: Text("Offline — showing this week's dishes. Connect a server to browse all 700+.",
+            child: Text("Offline — showing this week's dishes. Connect a server to browse all 1000+.",
                 style: TextStyle(color: R.gold, fontSize: 11), textAlign: TextAlign.center),
           ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: regions
-                  .map((rg) => Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          label: Text(rg == 'all' ? 'All' : humanize(rg)),
-                          selected: region == rg,
-                          selectedColor: R.gold.withOpacity(.25),
-                          onSelected: (_) => setState(() => region = rg),
-                        ),
-                      ))
-                  .toList(),
-            ),
-          ),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+          child: chipRow(diets, dietSel, (o) => setState(() => dietSel = o), (o) => dietLabel[o]!),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+          child: chipRow(regions, region, (o) => setState(() => region = o),
+              (o) => o == 'all' ? 'All' : humanize(o)),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),

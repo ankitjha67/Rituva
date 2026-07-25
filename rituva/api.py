@@ -249,18 +249,24 @@ def alternatives(member_id: str, recipe_id: str, day: Optional[str] = None):
 
 
 @app.get("/recipes")
-def list_recipes(region: Optional[str] = None, role: Optional[str] = None, limit: int = 800):
-    """Browse the dish library (Discover). Every kcal is computed from the Knowledge DB."""
+def list_recipes(region: Optional[str] = None, role: Optional[str] = None,
+                 diet: Optional[str] = None, limit: int = 1500):
+    """Browse the dish library (Discover). kcal from the Knowledge DB; `diet` filters by
+    veg / nonveg / vegan / jain / gluten_free (labels derived from ingredients, diet.py)."""
+    from .diet import labels as diet_labels
     out = []
     for r in RECIPES.values():
         if region and (r.region.value if r.region else "") != region:
             continue
         if role and r.role.value != role:
             continue
+        lab = diet_labels(r)
+        if diet and diet not in lab:
+            continue
         n = make_component(r).nutrients
         out.append({"id": r.id, "name": r.name,
                     "region": r.region.value if r.region else None,
-                    "role": r.role.value, "tags": sorted(r.tags),
+                    "role": r.role.value, "diet": sorted(lab),
                     "kcal": round(n["kcal"]), "protein": round(n["protein"], 1)})
         if len(out) >= limit:
             break

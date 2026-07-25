@@ -29,6 +29,8 @@ class DietType(str, Enum):
     LACTO_OVO = "lacto_ovo"
     VEGAN = "vegan"
     PESCATARIAN = "pescatarian"
+    JAIN = "jain"            # vegetarian + no onion/garlic/root vegetables
+    NONVEG = "nonveg"        # omnivore — allows everything
 
 
 class MealSlot(str, Enum):

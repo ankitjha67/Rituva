@@ -44,15 +44,11 @@ def season_for_month(month: int) -> Season:
 # ---------------------------------------------------------------------------
 # Candidate filtering
 # ---------------------------------------------------------------------------
-def diet_ok(recipe: Recipe, diet: DietType) -> bool:
-    c = recipe.contains
-    if diet == DietType.VEGAN:
-        return not (c & {"dairy", "egg", "meat", "fish"})
-    if diet in (DietType.LACTO_VEG,):
-        return not (c & {"egg", "meat", "fish"})
-    if diet == DietType.LACTO_OVO:
-        return not (c & {"meat", "fish"})
-    return True
+def diet_ok(recipe: Recipe, member: Member) -> bool:
+    # Diet suitability is derived from the recipe's ingredients (veg/non-veg, vegan,
+    # Jain, gluten-free) — see diet.py. Lazy import avoids any module load-order cycle.
+    from .diet import diet_ok as _classify_ok
+    return _classify_ok(recipe, member)
 
 
 def excluded(recipe: Recipe, member: Member) -> bool:
@@ -70,7 +66,7 @@ def season_ok(recipe: Recipe, season: Season) -> bool:
 
 def base_pool(role: Role, member: Member, season: Season) -> List[Recipe]:
     return [r for r in RECIPES.values()
-            if r.role == role and diet_ok(r, member.diet_type)
+            if r.role == role and diet_ok(r, member)
             and not excluded(r, member) and season_ok(r, season)]
 
 
