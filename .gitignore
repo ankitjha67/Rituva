@@ -13,6 +13,7 @@ rituva.db
 
 # --- IFCT 2017 local food data (personal-use only per IFCT terms; NOT for public redistribution) ---
 rituva/ifct_local.py
+rituva/recipes_local.py
 ifct_*.json
 
 # --- Claude Code / local tooling ---

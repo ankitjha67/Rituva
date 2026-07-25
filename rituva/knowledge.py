@@ -273,6 +273,17 @@ _RECIPES = [
 ]
 RECIPES = {r.id: r for r in _RECIPES}
 
+# Optional LOCAL recipe library (rituva/recipes_local.py) — 500+ dishes generated from
+# home-cooking templates over the local food DB. Gitignored (many dishes use IFCT-derived
+# foods), so absent in the public repo / CI, where RECIPES stays the curated set above.
+try:
+    from .recipes_local import RECIPES_LOCAL as _RECIPES_LOCAL
+    for _recipe in _RECIPES_LOCAL:
+        if all(ing.food_id in FOODS for ing in _recipe.ingredients):   # only fully-resolvable dishes
+            RECIPES.setdefault(_recipe.id, _recipe)
+except ImportError:
+    pass
+
 
 # ---------------------------------------------------------------------------
 # GUIDELINE RULES  (cited targets/limits — the KB the TargetEngine draws on)
