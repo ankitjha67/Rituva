@@ -174,3 +174,21 @@ uvicorn rituva.api:app --reload   # API + Swagger at /docs; PWA at http://localh
   adaptive Android launcher via **flutter_launcher_icons** (CI step) + PWA/website PNGs (192/512
   maskable, apple-touch) wired into `manifest.webmanifest` + `index.html`. Bumped app to 0.1.1+2.
   Pushed → CI building the fixed, icon'd APK (run 30148699269).
+- **2026-07-25 (Claude Code, big phases):** Fixed **Plan-tab tap** (day→meals sheet), **snake_case UI
+  labels** (root cause: citation carried the raw rule-id prefix — split search vs `display` text in
+  `retrieval.py`; humanized slots/conditions/source), and a **planner determinism bug** (`hash()`→
+  `zlib.crc32`, since str hash is PYTHONHASHSEED-salted → flaky tests + non-reproducible demo). Added
+  **iOS** (platform-aware base URL, opaque icon, `build-ios.yml` on macOS, ATS; CI scaffolds both
+  platforms so flutter_launcher_icons finds them). **IFCT 2017 ingested** (`C:\Users\ankit\Downloads\
+  IFCT2017.pdf`, 585pp) via coordinate-aware fitz parser (`scratchpad/ifct_extract.py` +
+  `generate_ifct_local.py`) → **518 foods → `rituva/ifct_local.py` (GITIGNORED, personal-use per IFCT
+  licence — see [[nutrition-source-documents]]; NEVER commit)**; KB now **601 foods** locally.
+  **680 recipes** generated from home-cooking templates (`generate_recipes_local.py`) →
+  `rituva/recipes_local.py` (gitignored) → **774 recipes** locally; knowledge.py loads both if present
+  (curated wins; CI/public falls back to 95 foods / 94 recipes). **GCP deploy assets**: `Dockerfile` +
+  `.dockerignore` (keeps IFCT/secrets out of the image) + `deploy/README.md` (Cloud SQL + Cloud Run +
+  Secret Manager runbook). **NVIDIA NIM wired**: `api.py` reads `RITUVA_LLM_PROVIDER`/`NVIDIA_API_KEY`
+  → graph.run; `/health` reports foods/recipes/llm; `scripts/llm_smoketest.py`. **NIN permission email**
+  drafted (`docs/NIN-IFCT-permission-request.md`, user to send). **Flutter Insights + Discover** screens
+  (+ `GET /recipes`; 6-tab nav). CI: build-apk skips backend/docs paths. Tests 9/9 + 14 throughout.
+  **Local-only data (ifct_local.py, recipes_local.py) is gitignored — verified never staged.**
