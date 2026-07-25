@@ -1,7 +1,7 @@
 name: rituva
 description: "Rituva — seasonal, guideline-grounded menu planner (Flutter client for the Rituva API)."
 publish_to: "none"
-version: 0.1.0+1
+version: 0.1.1+2
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -11,9 +11,22 @@ dependencies:
     sdk: flutter
   http: ^1.2.0
   cupertino_icons: ^1.0.6
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.13.1
+
+# Rituva "My Plate ring" launcher icon — generated in CI via `dart run flutter_launcher_icons`.
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/rituva_icon.png"
+  adaptive_icon_background: "#0A1410"
+  adaptive_icon_foreground: "assets/icon/rituva_fg.png"
+  min_sdk_android: 21
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/demo.json

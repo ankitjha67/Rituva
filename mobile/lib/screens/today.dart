@@ -173,6 +173,18 @@ class TodayScreen extends StatelessWidget {
       builder: (_) => FutureBuilder(
         future: api.alternatives(memberId, recipeId, day['date'] as String),
         builder: (c, snap) {
+          if (snap.hasError) {
+            return SizedBox(
+              height: 180,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text('${snap.error}',
+                      textAlign: TextAlign.center, style: const TextStyle(color: R.muted)),
+                ),
+              ),
+            );
+          }
           if (!snap.hasData) {
             return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: R.gold)));
           }

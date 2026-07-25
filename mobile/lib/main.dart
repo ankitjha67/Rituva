@@ -25,9 +25,10 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  final api = const RituvaApi();
+  RituvaApi? api;
   int index = 0;
   bool loading = true;
+  bool offline = false;
   String? error;
   String memberId = 'aarav';
   Map<String, dynamic>? ctx, member, targets, anthro, plan, day;
@@ -45,16 +46,19 @@ class _HomeShellState extends State<HomeShell> {
       error = null;
     });
     try {
-      ctx = await api.context();
-      members = await api.members();
-      member = await api.member(memberId);
-      final t = await api.targets(memberId);
+      api ??= await RituvaApi.create();
+      final a = api!;
+      ctx = await a.context();
+      members = await a.members();
+      member = await a.member(memberId);
+      final t = await a.targets(memberId);
       targets = t['targets'] as Map<String, dynamic>;
       anthro = t['anthropometry'] as Map<String, dynamic>;
-      plan = await api.createPlan(memberId, days: 7, start: ctx!['today'] as String);
+      plan = await a.createPlan(memberId, days: 7, start: ctx!['today'] as String);
       final days = plan!['days'] as List;
       day = days.firstWhere((d) => d['date'] == ctx!['today'], orElse: () => days.first)
           as Map<String, dynamic>;
+      offline = a.offline;
     } catch (e) {
       error = '$e';
     }
@@ -67,32 +71,38 @@ class _HomeShellState extends State<HomeShell> {
     if (mounted) setState(() => index = 0);
   }
 
+  Future<void> _saveServer(String url) async {
+    await api?.setBaseUrl(url);
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator(color: R.gold)));
     }
     if (error != null) {
-      return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              'Cannot reach the Rituva API.\n\n$error\n\n'
-              'Start it with:\n  uvicorn rituva.api:app --host 0.0.0.0 --port 8000\n'
-              '(emulator uses http://10.0.2.2:8000)',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: R.muted),
-            ),
-          ),
-        ),
+      return _ErrorScreen(
+        error: error!,
+        serverUrl: api?.baseUrl ?? RituvaApi.defaultUrl,
+        onRetry: _load,
+        onSaveServer: _saveServer,
       );
     }
+    final a = api!;
     final screens = [
-      TodayScreen(ctx: ctx!, targets: targets!, day: day!, plan: plan!, api: api, memberId: memberId),
-      PlanScreen(plan: plan!, ctx: ctx!, api: api),
-      HealthScreen(member: member!, targets: targets!, anthro: anthro!, api: api, memberId: memberId, onChanged: _load),
-      ProfileScreen(members: members, memberId: memberId, plan: plan!, onSwitch: _switchMember),
+      TodayScreen(ctx: ctx!, targets: targets!, day: day!, plan: plan!, api: a, memberId: memberId),
+      PlanScreen(plan: plan!, ctx: ctx!, api: a),
+      HealthScreen(member: member!, targets: targets!, anthro: anthro!, api: a, memberId: memberId, onChanged: _load),
+      ProfileScreen(
+        members: members,
+        memberId: memberId,
+        plan: plan!,
+        onSwitch: _switchMember,
+        serverUrl: a.baseUrl,
+        offline: offline,
+        onSaveServer: _saveServer,
+      ),
     ];
     return Scaffold(
       appBar: AppBar(
@@ -107,7 +117,12 @@ class _HomeShellState extends State<HomeShell> {
           ],
         ),
       ),
-      body: IndexedStack(index: index, children: screens),
+      body: Column(
+        children: [
+          if (offline) const _OfflineBanner(),
+          Expanded(child: IndexedStack(index: index, children: screens)),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         backgroundColor: R.bg2,
         selectedIndex: index,
@@ -123,23 +138,127 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
-/// Small inline Profile screen (member switch + provenance).
-class ProfileScreen extends StatelessWidget {
+/// Thin strip shown when the app is running on the bundled demo (no server).
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner();
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        color: R.gold.withOpacity(.14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        child: Row(
+          children: const [
+            Icon(Icons.cloud_off, size: 15, color: R.gold),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text('Offline demo — bundled sample plan. Connect your server in Profile → Server.',
+                  style: TextStyle(color: R.gold, fontSize: 11.5)),
+            ),
+          ],
+        ),
+      );
+}
+
+/// Friendly connection screen (only shown for real server errors — network
+/// failures fall back to the offline demo instead of erroring).
+class _ErrorScreen extends StatefulWidget {
+  final String error;
+  final String serverUrl;
+  final Future<void> Function() onRetry;
+  final Future<void> Function(String) onSaveServer;
+  const _ErrorScreen({
+    required this.error,
+    required this.serverUrl,
+    required this.onRetry,
+    required this.onSaveServer,
+  });
+  @override
+  State<_ErrorScreen> createState() => _ErrorScreenState();
+}
+
+class _ErrorScreenState extends State<_ErrorScreen> {
+  late final TextEditingController ctrl = TextEditingController(text: widget.serverUrl);
+  @override
+  void dispose() {
+    ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline, color: R.gold, size: 40),
+                  const SizedBox(height: 12),
+                  const Text('Server error', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                  const SizedBox(height: 8),
+                  Text(widget.error, textAlign: TextAlign.center, style: const TextStyle(color: R.muted, fontSize: 12)),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: ctrl,
+                    decoration: const InputDecoration(labelText: 'Server URL', hintText: 'http://192.168.1.5:8000'),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(
+                      child: OutlinedButton(onPressed: widget.onRetry, child: const Text('Retry')),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () => widget.onSaveServer(ctrl.text),
+                        child: const Text('Save & reconnect'),
+                      ),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+/// Profile: member switch, provenance, and the backend Server URL setting.
+class ProfileScreen extends StatefulWidget {
   final List members;
   final String memberId;
   final Map<String, dynamic> plan;
   final Future<void> Function(String) onSwitch;
+  final String serverUrl;
+  final bool offline;
+  final Future<void> Function(String) onSaveServer;
   const ProfileScreen({
     super.key,
     required this.members,
     required this.memberId,
     required this.plan,
     required this.onSwitch,
+    required this.serverUrl,
+    required this.offline,
+    required this.onSaveServer,
   });
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  late final TextEditingController urlCtrl = TextEditingController(text: widget.serverUrl);
+
+  @override
+  void dispose() {
+    urlCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final prov = (plan['provenance'] as Map?) ?? {};
+    final prov = (widget.plan['provenance'] as Map?) ?? {};
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -147,16 +266,78 @@ class ProfileScreen extends StatelessWidget {
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
-          children: members
+          children: widget.members
               .map<Widget>((m) => ChoiceChip(
                     label: Text('${m['name']}'),
-                    selected: m['id'] == memberId,
+                    selected: m['id'] == widget.memberId,
                     selectedColor: R.gold.withOpacity(.25),
-                    onSelected: (_) => onSwitch(m['id'] as String),
+                    onSelected: (_) => widget.onSwitch(m['id'] as String),
                   ))
               .toList(),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 18),
+        // ---- Server URL ----
+        const Text('SERVER', style: TextStyle(color: R.muted, fontSize: 11, letterSpacing: 1.2)),
+        const SizedBox(height: 8),
+        Card(
+          color: R.surface,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Icon(widget.offline ? Icons.cloud_off : Icons.cloud_done,
+                      size: 16, color: widget.offline ? R.gold : R.green),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.offline
+                          ? 'Offline — showing the bundled demo plan.'
+                          : 'Connected to ${widget.serverUrl}',
+                      style: TextStyle(color: widget.offline ? R.gold : R.green, fontSize: 12),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: urlCtrl,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    labelText: 'Backend URL',
+                    hintText: 'http://192.168.1.5:8000',
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Run the Rituva backend, then enter its address. On the same Wi-Fi, '
+                  'use your PC\'s LAN IP (e.g. http://192.168.1.5:8000). Leave blank to reset.',
+                  style: TextStyle(color: R.muted, fontSize: 11),
+                ),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        urlCtrl.text = '';
+                        widget.onSaveServer('');
+                      },
+                      child: const Text('Reset'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => widget.onSaveServer(urlCtrl.text),
+                      child: const Text('Save & reconnect'),
+                    ),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
         Card(
           color: R.surface,
           child: Padding(

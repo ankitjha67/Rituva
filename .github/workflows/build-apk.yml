@@ -48,8 +48,9 @@ jobs:
         run: |
           flutter create --platforms=android --org io.rituva --project-name rituva /tmp/scaffold
           cp -r /tmp/scaffold/android ./android
-          # Allow cleartext HTTP so a self-hosted dev backend is reachable.
-          sed -i 's#<application#<application android:usesCleartextTraffic="true"#' android/app/src/main/AndroidManifest.xml
+          # Add INTERNET permission (Flutter only adds it to debug builds) and allow
+          # cleartext HTTP so a self-hosted dev backend is reachable.
+          sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application android:usesCleartextTraffic="true"#' android/app/src/main/AndroidManifest.xml
 
       - name: Cache Gradle (now that android/ exists — speeds up later builds)
         uses: actions/cache@v4
@@ -62,6 +63,9 @@ jobs:
 
       - name: Install packages
         run: flutter pub get
+
+      - name: Generate launcher icons (Rituva My Plate ring)
+        run: dart run flutter_launcher_icons
 
       - name: Build release APK
         run: |

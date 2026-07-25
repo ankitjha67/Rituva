@@ -118,10 +118,17 @@ class _HealthScreenState extends State<HealthScreen> {
                           .map<Widget>((v) => InputChip(
                                 label: Text('$v'),
                                 onDeleted: () async {
-                                  await widget.api.removeMemory(widget.memberId, 'never', '$v');
-                                  await widget.api.removeMemory(widget.memberId, 'dislike', '$v');
-                                  await _loadMem();
-                                  await widget.onChanged();
+                                  try {
+                                    await widget.api.removeMemory(widget.memberId, 'never', '$v');
+                                    await widget.api.removeMemory(widget.memberId, 'dislike', '$v');
+                                    await _loadMem();
+                                    await widget.onChanged();
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(SnackBar(content: Text('$e')));
+                                    }
+                                  }
                                 },
                               ))
                           .toList(),
@@ -139,10 +146,17 @@ class _HealthScreenState extends State<HealthScreen> {
                     onPressed: () async {
                       final v = ctrl.text.trim().toLowerCase();
                       if (v.isEmpty) return;
-                      await widget.api.addMemory(widget.memberId, 'never', v);
-                      ctrl.clear();
-                      await _loadMem();
-                      await widget.onChanged();
+                      try {
+                        await widget.api.addMemory(widget.memberId, 'never', v);
+                        ctrl.clear();
+                        await _loadMem();
+                        await widget.onChanged();
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(SnackBar(content: Text('$e')));
+                        }
+                      }
                     },
                     child: const Text('Never'),
                   ),
