@@ -11,6 +11,7 @@ This is also the guaranteed fallback when no LLM is configured or an LLM step fa
 """
 from __future__ import annotations
 
+import zlib
 from datetime import date, timedelta
 from typing import Dict, List, Optional, Tuple
 
@@ -146,7 +147,10 @@ def _score(r: Recipe, member: Member, ledger: Ledger, di: int) -> float:
     if "high_protein" in r.tags and member.goal == Goal.MUSCLE:
         s += 2.0
     s += min(ledger.days_since(r, di), 12) * 0.1            # favour least-recently-used
-    s += ((hash(r.id) + di * 7) % 5) * 0.06                 # deterministic tie-break for variety
+    # Stable tie-break for variety. NB: Python's built-in hash() of a str is salted by
+    # PYTHONHASHSEED, so it varies per process — using it here made plans (and tests, and
+    # the offline demo) non-reproducible. crc32 is stable across processes.
+    s += ((zlib.crc32(r.id.encode()) + di * 7) % 5) * 0.06
     return s
 
 

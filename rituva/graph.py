@@ -62,7 +62,7 @@ def node_retrieve(s: PipelineState) -> PipelineState:
         " ".join(r.value for r in m.region_prefs),
     ]).strip()
     s.citations = [
-        {"rule": d.id, "text": d.text, "source": d.source}
+        {"rule": d.id, "text": d.display or d.text, "source": d.source}
         for d in rules_for(query, top=4)
     ]
     return s

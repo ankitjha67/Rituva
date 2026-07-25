@@ -148,13 +148,13 @@ class TodayScreen extends StatelessWidget {
               height: 44,
               alignment: Alignment.center,
               decoration: BoxDecoration(color: R.gold.withOpacity(.15), borderRadius: BorderRadius.circular(12)),
-              child: Text(_emoji(slot), style: const TextStyle(fontSize: 20)),
+              child: Text(mealEmoji(slot), style: const TextStyle(fontSize: 20)),
             ),
             const SizedBox(width: 11),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(names, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                Text('${_cap(slot)} · ${(e['nutrients']['kcal'] as num).round()} kcal',
+                Text('${slotLabel(slot)} · ${(e['nutrients']['kcal'] as num).round()} kcal',
                     style: const TextStyle(color: R.muted, fontSize: 10.5)),
               ]),
             ),
@@ -221,9 +221,6 @@ class TodayScreen extends StatelessWidget {
     );
   }
 
-  static String _emoji(String s) =>
-      {'breakfast': '🥣', 'lunch': '🍚', 'dinner': '🫓', 'snack1': '🥜', 'snack2': '🍎'}[s] ?? '🍽️';
-  static String _cap(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
   static Widget _tag(String r) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         decoration: BoxDecoration(color: regionColor(r).withOpacity(.2), borderRadius: BorderRadius.circular(6)),

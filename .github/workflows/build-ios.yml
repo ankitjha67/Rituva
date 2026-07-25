@@ -1,0 +1,61 @@
+name: Build iOS app
+
+# Compiles the Flutter iOS app on a macOS runner to verify it builds (unsigned).
+# For day-to-day testing, run it on your own Mac's Simulator with `flutter run`
+# (see mobile/README.md) — that gives hot reload. This CI job is the "does it still
+# build on iOS?" gate. macOS minutes cost 10× Linux, so it runs only when Dart code
+# or dependencies change, or on manual dispatch.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "mobile/lib/**"
+      - "mobile/pubspec.yaml"
+      - "mobile/assets/**"
+      - ".github/workflows/build-ios.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate ios/ scaffolding (not committed to git)
+        run: |
+          flutter create --platforms=ios --org io.rituva --project-name rituva /tmp/scaffold_ios
+          cp -R /tmp/scaffold_ios/ios ./ios
+          # Allow cleartext HTTP to a self-hosted dev backend (App Transport Security).
+          PLIST=ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST"
+
+      - name: Install packages
+        run: flutter pub get
+
+      - name: Generate launcher icons (Rituva My Plate ring)
+        run: dart run flutter_launcher_icons
+
+      - name: Build iOS (release, no code signing)
+        run: flutter build ios --release --no-codesign
+
+      - name: Upload unsigned .app (build artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rituva-iOS-app-unsigned
+          path: mobile/build/ios/iphoneos/Runner.app
+          if-no-files-found: warn

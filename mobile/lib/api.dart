@@ -24,10 +24,16 @@ class OfflineException implements Exception {
 /// APK is usable with no backend at all.
 class RituvaApi {
   static const _prefKey = 'rituva_server_url';
-  // Default is the Android-emulator alias for the host's localhost. CI can bake a
-  // real backend URL via `--dart-define=RITUVA_API=https://your-host`.
-  static const String _default =
-      String.fromEnvironment('RITUVA_API', defaultValue: 'http://10.0.2.2:8000');
+  // Emulator/simulator host aliases differ: the Android emulator reaches the host's
+  // localhost at 10.0.2.2, while the iOS simulator (and desktop) use localhost.
+  // A CI-baked `--dart-define=RITUVA_API=https://your-host` overrides both.
+  static final String _default = _resolveDefault();
+  static String _resolveDefault() {
+    const baked = String.fromEnvironment('RITUVA_API', defaultValue: '');
+    if (baked.isNotEmpty) return baked;
+    return Platform.isAndroid ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
+  }
+
   static const _timeout = Duration(seconds: 6);
 
   String baseUrl;

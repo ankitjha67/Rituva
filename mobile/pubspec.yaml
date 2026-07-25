@@ -20,8 +20,10 @@ dev_dependencies:
 # Rituva "My Plate ring" launcher icon — generated in CI via `dart run flutter_launcher_icons`.
 flutter_launcher_icons:
   android: true
-  ios: false
+  ios: true
   image_path: "assets/icon/rituva_icon.png"
+  image_path_ios: "assets/icon/rituva_ios.png"   # opaque square (iOS forbids alpha)
+  remove_alpha_ios: true
   adaptive_icon_background: "#0A1410"
   adaptive_icon_foreground: "assets/icon/rituva_fg.png"
   min_sdk_android: 21

@@ -39,3 +39,34 @@ Color regionColor(String? r) {
       return R.muted;
   }
 }
+
+/// Turn any snake_case / lowercase identifier into a friendly label
+/// (e.g. `lacto_veg` → "Lacto veg", `kidney_stones` → "Kidney stones").
+String humanize(String? s) {
+  if (s == null || s.isEmpty) return '';
+  return s
+      .replaceAll('_', ' ')
+      .split(' ')
+      .where((w) => w.isNotEmpty)
+      .map((w) => w[0].toUpperCase() + w.substring(1))
+      .join(' ');
+}
+
+/// Human-facing meal-slot names (the engine uses snack1/snack2 internally).
+String slotLabel(String s) => const {
+      'breakfast': 'Breakfast',
+      'snack1': 'Mid-morning',
+      'lunch': 'Lunch',
+      'snack2': 'Evening snack',
+      'dinner': 'Dinner',
+    }[s] ??
+    humanize(s);
+
+String mealEmoji(String s) => const {
+      'breakfast': '🥣',
+      'lunch': '🍚',
+      'dinner': '🫓',
+      'snack1': '🥜',
+      'snack2': '🍎',
+    }[s] ??
+    '🍽️';

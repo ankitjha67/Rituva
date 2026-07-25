@@ -32,20 +32,119 @@ class PlanScreen extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 4),
+        const Text('Tap a day to see its meals', style: TextStyle(color: R.muted, fontSize: 11)),
+        const SizedBox(height: 8),
         ...days.map((d) => Card(
               color: R.surface,
               child: ListTile(
-                title: Text('${d['date']}${d['date'] == ctx['today'] ? ' · today' : ''}',
+                onTap: () => _showDay(context, d as Map<String, dynamic>),
+                title: Text('${_pretty(d['date'] as String)}${d['date'] == ctx['today'] ? ' · today' : ''}',
                     style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
                 subtitle: Text('${(d['totals']['kcal'] as num).round()} kcal · DQS ${d['validation']['dqs']}',
                     style: const TextStyle(color: R.muted, fontSize: 11)),
-                trailing: Icon(Icons.circle,
-                    size: 10, color: (d['validation']['in_tolerance'] as bool) ? R.green : R.gold),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.circle,
+                        size: 10, color: (d['validation']['in_tolerance'] as bool) ? R.green : R.gold),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.chevron_right, color: R.muted),
+                  ],
+                ),
               ),
             )),
       ],
     );
+  }
+
+  /// Day-detail sheet: the meals planned for the tapped day.
+  void _showDay(BuildContext context, Map<String, dynamic> d) {
+    final entries = d['entries'] as List;
+    final totals = d['totals'] as Map;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: R.bg2,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: .7,
+        maxChildSize: .92,
+        minChildSize: .4,
+        expand: false,
+        builder: (c, sc) => ListView(
+          controller: sc,
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(_pretty(d['date'] as String),
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+            Text(
+              '${(totals['kcal'] as num).round()} kcal · '
+              'P ${(totals['protein'] as num).round()}g · '
+              'Fibre ${(totals['fibre'] as num).round()}g · DQS ${d['validation']['dqs']}',
+              style: const TextStyle(color: R.muted, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            ...entries.map((e) => _mealRow(e as Map)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _mealRow(Map e) {
+    final comps = e['components'] as List;
+    final names = comps.map((c) => c['name']).join(' + ');
+    final slot = e['slot'] as String;
+    final main = (slot == 'lunch' || slot == 'dinner') && comps.length > 1 ? comps[1] : comps.first;
+    final region = main['region'] as String?;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.all(11),
+        decoration: BoxDecoration(
+          color: R.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: R.line),
+        ),
+        child: Row(children: [
+          Container(
+            width: 44,
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: R.gold.withOpacity(.15), borderRadius: BorderRadius.circular(12)),
+            child: Text(mealEmoji(slot), style: const TextStyle(fontSize: 20)),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(names, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+              Text('${slotLabel(slot)} · ${(e['nutrients']['kcal'] as num).round()} kcal',
+                  style: const TextStyle(color: R.muted, fontSize: 10.5)),
+            ]),
+          ),
+          if (region != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                  color: regionColor(region).withOpacity(.2), borderRadius: BorderRadius.circular(6)),
+              child: Text(region[0].toUpperCase(),
+                  style: TextStyle(color: regionColor(region), fontWeight: FontWeight.w800, fontSize: 10)),
+            ),
+        ]),
+      ),
+    );
+  }
+
+  /// "2026-07-25" → "Sat, 25 Jul" (falls back to the raw string on any parse issue).
+  static String _pretty(String iso) {
+    try {
+      final d = DateTime.parse(iso);
+      const wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${wd[d.weekday - 1]}, ${d.day} ${mo[d.month - 1]}';
+    } catch (_) {
+      return iso;
+    }
   }
 
   Future<void> _grocery(BuildContext context) async {
@@ -56,6 +155,18 @@ class PlanScreen extends StatelessWidget {
       builder: (_) => FutureBuilder(
         future: api.grocery(plan['plan_id'] as String, people: 2),
         builder: (c, snap) {
+          if (snap.hasError) {
+            return SizedBox(
+              height: 180,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text('${snap.error}',
+                      textAlign: TextAlign.center, style: const TextStyle(color: R.muted)),
+                ),
+              ),
+            );
+          }
           if (!snap.hasData) {
             return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: R.gold)));
           }

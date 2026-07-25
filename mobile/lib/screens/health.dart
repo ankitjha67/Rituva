@@ -61,7 +61,7 @@ class _HealthScreenState extends State<HealthScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('DAILY TARGETS · ${t['source']}',
+                Text('DAILY TARGETS · ${humanize(t['source'] as String?)}',
                     style: const TextStyle(color: R.muted, fontSize: 11, letterSpacing: 1.2)),
                 const SizedBox(height: 10),
                 Row(children: [
@@ -93,7 +93,7 @@ class _HealthScreenState extends State<HealthScreen> {
                   spacing: 6,
                   children: conds.isEmpty
                       ? const [Text('none', style: TextStyle(color: R.muted))]
-                      : conds.map<Widget>((c) => Chip(label: Text('$c'.replaceAll('_', ' ')))).toList(),
+                      : conds.map<Widget>((c) => Chip(label: Text(humanize('$c')))).toList(),
                 ),
               ],
             ),

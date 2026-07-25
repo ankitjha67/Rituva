@@ -34,9 +34,10 @@ def _tok(s: str) -> List[str]:
 class Doc:
     id: str
     kind: str          # 'rule' | 'recipe'
-    text: str
+    text: str          # indexing text — includes topic/tags/ingredients for search recall
     source: str
     meta: dict
+    display: str = ""  # human-facing text (no raw ids) for citation cards / search UI
 
 
 def _build_corpus() -> List[Doc]:
@@ -45,11 +46,13 @@ def _build_corpus() -> List[Doc]:
         docs.append(Doc(f"rule:{g['topic']}", "rule",
                         f"{g['topic']} {g['statement']}",
                         f"{g['source']} p.{g.get('page', '')}".strip(" p."),
-                        {"value": g.get("value")}))
+                        {"value": g.get("value")},
+                        display=g["statement"]))
     for r in RECIPES.values():
         ings = " ".join(FOODS[i.food_id].name for i in r.ingredients if i.food_id in FOODS)
         text = f"{r.name} {r.role.value} {r.region.value if r.region else ''} {' '.join(r.tags)} {ings}"
-        docs.append(Doc(f"recipe:{r.id}", "recipe", text, "recipe DB", {"recipe_id": r.id}))
+        docs.append(Doc(f"recipe:{r.id}", "recipe", text, "recipe DB",
+                        {"recipe_id": r.id}, display=r.name))
     return docs
 
 
