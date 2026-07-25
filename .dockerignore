@@ -1,0 +1,23 @@
+# Keep the image small AND keep IFCT data / secrets out of it.
+.git
+.github
+mobile
+design
+docs
+scratchpad
+tests
+**/__pycache__
+*.pyc
+.pytest_cache
+.venv
+venv
+
+# --- must never enter the image (licence / secrets / local state) ---
+rituva/ifct_local.py
+ifct_*.json
+*.db
+rituva.db
+.env
+*.key
+*.apk
+*.aab

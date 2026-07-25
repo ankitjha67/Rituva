@@ -6,6 +6,7 @@ Docs:  http://localhost:8000/docs
 """
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import date
 from typing import List, Optional
@@ -24,6 +25,12 @@ from .targets import targets_report
 from .grocery import aggregate as grocery_aggregate
 from .export import plan_to_xlsx
 from fastapi.responses import Response
+
+# LLM config from the environment (optional). Only the friendly explanation uses the
+# LLM; every nutrient number is computed from the Knowledge DB regardless of provider.
+_LLM_PROVIDER = os.environ.get("RITUVA_LLM_PROVIDER", "none")
+_LLM_KEY = (os.environ.get("NVIDIA_API_KEY") or os.environ.get("OPENAI_API_KEY")
+            or os.environ.get("RITUVA_API_KEY", ""))
 
 app = FastAPI(title="Rituva API",
               description="Guideline-grounded, seasonal, LLM-agnostic menu planner. "
@@ -91,7 +98,8 @@ class IntakeIn(BaseModel):
 # ---- routes ----
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": __version__, "kb": KB_VERSION}
+    return {"status": "ok", "version": __version__, "kb": KB_VERSION,
+            "foods": len(FOODS), "recipes": len(RECIPES), "llm": _LLM_PROVIDER}
 
 
 @app.get("/context")
@@ -158,7 +166,7 @@ def create_plan(p: PlanIn):
         start = date.fromisoformat(p.start) if p.start else detect().today
         # graph.run folds long-term memory into exclusions, retrieves the cited
         # rules for provenance, plans deterministically, then explains (PRD §9.7).
-        state = graph.run(m, start, p.days, conn=conn)
+        state = graph.run(m, start, p.days, provider=_LLM_PROVIDER, api_key=_LLM_KEY, conn=conn)
         t = state.targets
         plan = state.plan
         days = [store.day_to_dict(dp, rep) for dp, rep in plan]
