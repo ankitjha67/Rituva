@@ -192,3 +192,17 @@ uvicorn rituva.api:app --reload   # API + Swagger at /docs; PWA at http://localh
   drafted (`docs/NIN-IFCT-permission-request.md`, user to send). **Flutter Insights + Discover** screens
   (+ `GET /recipes`; 6-tab nav). CI: build-apk skips backend/docs paths. Tests 9/9 + 14 throughout.
   **Local-only data (ifct_local.py, recipes_local.py) is gitignored — verified never staged.**
+- **2026-07-25 (Claude Code, 1000+ recipes + diet + backlog):** **`rituva/diet.py`** — classify a
+  recipe from its ingredients (veg/nonveg, vegan, jain=no onion/garlic/root, gluten_free + egg/meat/
+  fish/dairy flags), cached; added **DietType.JAIN + NONVEG**; `planner.diet_ok` delegates to it so
+  non-veg never leaks into a veg plan. Regenerated recipes_local with non-veg (fish/poultry/meat/
+  shellfish/egg) + Jain + more veg templates → **1208 generated → 1302 recipes** (veg 954, nonveg 348,
+  vegan 871, jain 541, GF 1287); every diet plans 7/7 on-target, 0 violations. `GET /recipes` gains a
+  `diet` filter + per-dish labels; **Discover** adds diet chips. **NB: recipe-generator seeds `used`
+  from BASE ids only** (`not startswith('g_')`) since RECIPES already includes any prior recipes_local
+  on import — else re-runs skip all g_* ids. Backlog: **Gemini/Vertex** provider (gateway.py,
+  RITUVA_LLM_PROVIDER=gemini, OpenAI-compat endpoint); **PDF export** (`export.plan_to_pdf` via fpdf2 +
+  `/plans/{id}/export.pdf`; Flutter Plan Export▾ menu via url_launcher); **Flutter food-logging**
+  (Today "Log meals as eaten" → POST /intake → adherence sheet; `api.dart` logDayAsEaten). Tests 9/9 +
+  14. NOTE: one APK build was environmentally CANCELED ("operation was canceled" — not a code error;
+  iOS built the same code fine) → `gh run rerun --failed`.
