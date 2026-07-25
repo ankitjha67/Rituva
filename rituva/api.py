@@ -184,6 +184,7 @@ def create_plan(p: PlanIn):
             "days_count": p.days, "targets": store.targets_to_dict(t), "days": days,
             "summary": {"on_target": sum(1 for _, r in plan if r.in_tolerance),
                         "avg_dqs": round(sum(r.dqs for _, r in plan) / len(plan))},
+            "explanation": state.explanation,
             "provenance": {"kb": KB_VERSION, **state.provenance,
                            "citations": state.citations},
         }

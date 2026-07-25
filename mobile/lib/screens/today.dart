@@ -29,6 +29,8 @@ class TodayScreen extends StatelessWidget {
       children: [
         _energyCard(kcal, tgtKcal, totals),
         if (cites.isNotEmpty) _citeCard(cites.first as Map),
+        if ('${plan['explanation'] ?? ''}'.trim().isNotEmpty)
+          _aiCard('${plan['explanation']}', '${(plan['provenance'] as Map?)?['llm_provider'] ?? ''}'),
         const SizedBox(height: 14),
         const Text("Today's menu · tap to swap",
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
@@ -215,6 +217,35 @@ class TodayScreen extends StatelessWidget {
               ),
             ]),
           ),
+        ),
+      );
+
+  Widget _aiCard(String text, String provider) => Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Container(
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            color: R.gold.withOpacity(.10),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: R.gold.withOpacity(.30)),
+          ),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Padding(
+              padding: EdgeInsets.only(right: 8, top: 1),
+              child: Text('✦', style: TextStyle(color: R.gold, fontSize: 15)),
+            ),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(text, style: const TextStyle(fontSize: 13, height: 1.35)),
+                if (provider.isNotEmpty && provider != 'none')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5),
+                    child: Text('written by $provider · every number is from the DB',
+                        style: const TextStyle(color: R.muted, fontSize: 10)),
+                  ),
+              ]),
+            ),
+          ]),
         ),
       );
 
