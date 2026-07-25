@@ -11,6 +11,13 @@ import uuid
 from datetime import date
 from typing import List, Optional
 
+# Load a local .env (gitignored) if present, so keys never live in shell history or code.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 

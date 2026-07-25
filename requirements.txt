@@ -15,6 +15,7 @@ uvicorn>=0.29        # ASGI server
 langgraph>=0.2       # stateful orchestration graph (PRD §9.7) — optional
 openpyxl>=3.1        # .xlsx export/import for Excel parity (PRD §11.3)
 fpdf2>=2.7           # PDF export of the plan (/plans/{id}/export.pdf)
+python-dotenv>=1.0   # load a local .env (LLM keys etc.) — optional
 pytest>=8.0          # test runner (tests also run standalone without it)
 
 # LLM providers are reached over their OpenAI-compatible HTTP endpoints using the
