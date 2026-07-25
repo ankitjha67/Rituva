@@ -83,21 +83,25 @@ adaptive targets, notifications.
   **Profile** (member switch, engine/provenance, sources sheet). Verified in-browser against
   the live server — all views render live data, no console errors.
 - `mobile/` ✅ **native Android/iOS app (Flutter)**: `lib/` = `main.dart` (shell + theme + state +
-  Profile) · `theme.dart` (approved palette) · `api.dart` (HTTP client) · `screens/today.dart`
-  (calorie ring CustomPaint + macros + meals + swap sheet) · `screens/plan.dart` (week + grocery
-  sheet) · `screens/health.dart` (targets + conditions + never/dislike memory); `pubspec.yaml`,
-  `README.md`. **NOT compiled in this sandbox (no Flutter SDK).** Run: `flutter create . &&
-  flutter pub get && flutter run` (backend on `--host 0.0.0.0`; emulator base `http://10.0.2.2:8000`).
-  Dart files are brace/paren-balanced; M3 idioms.
+  Profile w/ **Server-URL setting** + **offline banner**) · `theme.dart` (approved palette) ·
+  `api.dart` (**offline-first** HTTP client — falls back to bundled `assets/demo.json`, on-device
+  context, `shared_preferences` server URL) · `screens/today.dart` (calorie ring CustomPaint +
+  macros + meals + swap sheet) · `screens/plan.dart` (week + grocery sheet) · `screens/health.dart`
+  (targets + conditions + never/dislike memory); `assets/demo.json` (engine-built demo bundle,
+  DB-grounded, mirrors API shapes); `assets/icon/` (My Plate ring launcher source); `pubspec.yaml`
+  (adds `shared_preferences` + `flutter_launcher_icons`). **Built as an APK in CI** (Flutter SDK
+  absent locally). Emulator base `http://10.0.2.2:8000`; physical devices set a Server URL in
+  Profile or bake `RITUVA_API`. **INTERNET permission** + adaptive icon injected by CI. Fresh
+  install with no server → shows the offline demo, not an error.
 - `tests/` ✅ `test_core.py` (9 tests, standalone) + `test_api.py` (5 tests: smoke · memory/retrieval ·
   intake/adherence · PWA-serve · grocery/export).
 
 ## What's left (backlog, PRD-mapped)
 
-- **Phase D web PWA: ✅ DONE** (`web/`) + **native Android (Flutter) scaffold: ✅ DONE** (`mobile/`,
-  not yet compiled — needs a machine with the Flutter SDK). Remaining frontend: compile/run the
-  Flutter app; add its Insights/Discover screens; richer offline sync; in-app light-theme toggle;
-  hi-fi polish; Play/App-Store submission.
+- **Phase D web PWA: ✅ DONE** (`web/`) + **native Android (Flutter): ✅ built as an APK in CI**
+  (`mobile/`) with **offline-first demo**, **Server-URL setting**, **INTERNET permission**, and the
+  **My Plate ring adaptive icon**. Remaining frontend: Insights/Discover screens; richer online sync;
+  in-app light-theme toggle; hi-fi polish; Play/App-Store submission.
 - **DONE since:** grocery-list engine + endpoint + PWA sheet (`grocery.py`); `.xlsx` export
   (`export.py`, `/plans/{id}/export.xlsx`, download button in the app).
 - **Later (PRD §18.4/§19):** PDF export, OR-Tools optimizer, fuller life-stage/condition packs,
@@ -157,3 +161,16 @@ uvicorn rituva.api:app --reload   # API + Swagger at /docs; PWA at http://localh
   **`latest`** prerelease and the **`v0.1.0`** release. Direct download:
   https://github.com/ankitjha67/Rituva/releases/latest . Future pushes/releases rebuild it
   automatically. **GitHub upload + APK task COMPLETE.** Next queued: Flutter Insights/Discover screens.
+- **2026-07-25 (Claude Code, APK bugfix + icon):** User installed `Rituva-b3.apk` on a **physical
+  phone** → error "Cannot reach the Rituva API … Operation not permitted, errno=1 @ 10.0.2.2:8000".
+  Two bugs: (1) release APK lacked the **INTERNET permission** (Flutter injects it only into debug
+  builds → EPERM on socket create) — now added in the CI manifest sed; (2) `10.0.2.2` is emulator-only
+  and there was no backend. Fixed by making the client **offline-first**: bundled `mobile/assets/demo.json`
+  (built by `scratchpad/generate_demo.py` via the real engine — Aarav+Diya, 7-day plans, grocery,
+  all DB-grounded, exact API shapes), transparent fallback in `api.dart` on any network error,
+  on-device context mirroring `context.py`, an **offline banner**, and an in-app **Server URL** setting
+  (`shared_preferences`) in Profile; server-only actions (swap, save preference) show a clear message
+  offline. Designed the **Rituva "My Plate ring" app icon** (`scratchpad/make_icons.py`, PIL) →
+  adaptive Android launcher via **flutter_launcher_icons** (CI step) + PWA/website PNGs (192/512
+  maskable, apple-touch) wired into `manifest.webmanifest` + `index.html`. Bumped app to 0.1.1+2.
+  Pushed → CI building the fixed, icon'd APK (run 30148699269).
