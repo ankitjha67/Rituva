@@ -11,6 +11,10 @@ rituva.db
 .env
 *.key
 
+# --- IFCT 2017 local food data (personal-use only per IFCT terms; NOT for public redistribution) ---
+rituva/ifct_local.py
+ifct_*.json
+
 # --- Claude Code / local tooling ---
 .claude/
 scratchpad/

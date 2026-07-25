@@ -133,6 +133,16 @@ _FOOD_LIST = [
 ]
 FOODS = {f.id: f for f in _FOOD_LIST}
 
+# Optional LOCAL IFCT 2017 food data (rituva/ifct_local.py) — ~500+ foods extracted for
+# PERSONAL USE per IFCT terms. It is gitignored, so it is absent in the public repo / CI,
+# where the KB simply falls back to the curated set above. Curated ids win on collision.
+try:
+    from .ifct_local import IFCT_FOODS as _IFCT_FOODS
+    for _food in _IFCT_FOODS:
+        FOODS.setdefault(_food.id, _food)
+except ImportError:
+    pass
+
 
 # ---------------------------------------------------------------------------
 # RECIPES  (BOM = per-person raw quantities; hero = frequency-tracked ingredient)
