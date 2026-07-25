@@ -1,0 +1,40 @@
+# --- Python ---
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# --- Local data / secrets ---
+*.db
+rituva.db
+.env
+*.key
+
+# --- Claude Code / local tooling ---
+.claude/
+scratchpad/
+
+# --- Flutter generated scaffolding (CI regenerates via `flutter create`) ---
+mobile/android/
+mobile/ios/
+mobile/linux/
+mobile/macos/
+mobile/windows/
+mobile/web/
+mobile/build/
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.metadata
+mobile/pubspec.lock
+
+# --- Build outputs ---
+*.apk
+*.aab
+
+# --- OS / editors ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,25 @@
+# ---------------------------------------------------------------------------
+# Rituva dependencies
+#
+# The deterministic CORE (rituva.targets / nutrition / planner / knowledge) and
+# the CLI run on the Python STANDARD LIBRARY ALONE — no install required:
+#     python -m rituva.cli --member ankit --days 7
+#
+# The packages below enable the advanced stack described in PRD §12.3. Each is
+# optional; the code degrades gracefully when it is absent (e.g. LangGraph -> plain
+# sequential runner; no LLM key -> deterministic no-LLM planner).
+# ---------------------------------------------------------------------------
+pydantic>=2.0        # typed API models (PRD §12.5)
+fastapi>=0.110       # REST API layer (PRD §12.5)
+uvicorn>=0.29        # ASGI server
+langgraph>=0.2       # stateful orchestration graph (PRD §9.7) — optional
+openpyxl>=3.1        # .xlsx export/import for Excel parity (PRD §11.3)
+pytest>=8.0          # test runner (tests also run standalone without it)
+
+# LLM providers are reached over their OpenAI-compatible HTTP endpoints using the
+# standard library (urllib) — no vendor SDK needed. Configure a key on Settings:
+#   NVIDIA build.nvidia.com  ->  https://integrate.api.nvidia.com/v1  (PRD §10.5)
+#   Local models             ->  Ollama (https://ollama.com)
+# Optional richer retrieval (PRD §12.3): pgvector + rank_bm25 / sentence-transformers.
+# Optional Postgres backend for store.py (PRD §12.3): psycopg[binary]>=3.1
+#   (only needed when RITUVA_DB=postgresql://...; SQLite needs nothing extra)

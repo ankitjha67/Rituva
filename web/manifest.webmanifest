@@ -1,0 +1,13 @@
+{
+  "name": "Rituva — seasonal menus made for you",
+  "short_name": "Rituva",
+  "description": "Guideline-grounded, seasonal, non-repeating menu planner.",
+  "start_url": "/app/",
+  "scope": "/app/",
+  "display": "standalone",
+  "background_color": "#0A1410",
+  "theme_color": "#0A1410",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

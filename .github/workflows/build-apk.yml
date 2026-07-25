@@ -1,0 +1,84 @@
+name: Build Android APK
+
+# Builds a release APK in CI (no Flutter SDK is needed locally) and publishes it for
+# direct download. A push/merge to `main` refreshes the rolling `latest` prerelease;
+# publishing a versioned Release attaches a versioned APK to that release.
+#
+# NOTE: the first run takes ~15–20 min (downloads Flutter + Android SDK + Gradle);
+# later runs are much faster thanks to the caches below. If a build fails, open the
+# run log, fix, and push again — each push rebuilds.
+
+on:
+  push:
+    branches: [ main ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate android/ scaffolding (not committed to git)
+        run: |
+          flutter create --platforms=android --org io.rituva --project-name rituva /tmp/scaffold
+          cp -r /tmp/scaffold/android ./android
+          # Allow cleartext HTTP so a self-hosted dev backend is reachable.
+          sed -i 's#<application#<application android:usesCleartextTraffic="true"#' android/app/src/main/AndroidManifest.xml
+
+      - name: Install packages
+        run: flutter pub get
+
+      - name: Build release APK
+        run: |
+          flutter build apk --release \
+            --build-number=${{ github.run_number }} \
+            ${{ vars.RITUVA_API != '' && format('--dart-define=RITUVA_API={0}', vars.RITUVA_API) || '' }}
+          cp build/app/outputs/flutter-apk/app-release.apk "Rituva-b${{ github.run_number }}.apk"
+
+      - name: Upload APK as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rituva-APK
+          path: mobile/Rituva-*.apk
+
+      - name: Refresh rolling "latest" APK (direct download)
+        if: github.event_name != 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest Rituva build
+          prerelease: true
+          files: mobile/Rituva-*.apk
+          body: |
+            Auto-built APK from the newest commit on `main` (build ${{ github.run_number }}).
+            Download the `.apk` asset below and install on Android (enable "install unknown apps").
+
+      - name: Attach APK to the published Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: mobile/Rituva-*.apk
