@@ -35,7 +35,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
 
       - uses: subosito/flutter-action@v2
         with:
@@ -48,6 +47,15 @@ jobs:
           cp -r /tmp/scaffold/android ./android
           # Allow cleartext HTTP so a self-hosted dev backend is reachable.
           sed -i 's#<application#<application android:usesCleartextTraffic="true"#' android/app/src/main/AndroidManifest.xml
+
+      - name: Cache Gradle (now that android/ exists — speeds up later builds)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('mobile/android/**/*.gradle*', 'mobile/android/**/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
 
       - name: Install packages
         run: flutter pub get
