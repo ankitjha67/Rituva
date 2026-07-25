@@ -248,6 +248,25 @@ def alternatives(member_id: str, recipe_id: str, day: Optional[str] = None):
     }
 
 
+@app.get("/recipes")
+def list_recipes(region: Optional[str] = None, role: Optional[str] = None, limit: int = 800):
+    """Browse the dish library (Discover). Every kcal is computed from the Knowledge DB."""
+    out = []
+    for r in RECIPES.values():
+        if region and (r.region.value if r.region else "") != region:
+            continue
+        if role and r.role.value != role:
+            continue
+        n = make_component(r).nutrients
+        out.append({"id": r.id, "name": r.name,
+                    "region": r.region.value if r.region else None,
+                    "role": r.role.value, "tags": sorted(r.tags),
+                    "kcal": round(n["kcal"]), "protein": round(n["protein"], 1)})
+        if len(out) >= limit:
+            break
+    return {"count": len(out), "recipes": out}
+
+
 # ---- long-term memory: never / dislike / like (PRD §9.7, §17.4) ----
 @app.get("/members/{member_id}/memory")
 def read_memory(member_id: str):

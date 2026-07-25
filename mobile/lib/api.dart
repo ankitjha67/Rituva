@@ -213,6 +213,23 @@ class RituvaApi {
     }
   }
 
+  /// Browse the dish library (Discover). Server-only (throws offline).
+  Future<List> recipes({String? region, String? role}) async {
+    try {
+      final v = await _get('/recipes',
+              {if (region != null) 'region': region, if (role != null) 'role': role})
+          as Map<String, dynamic>;
+      offline = false;
+      return v['recipes'] as List;
+    } catch (e) {
+      if (_isNet(e)) {
+        offline = true;
+        throw OfflineException('Browsing all dishes');
+      }
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> memory(String id) async {
     try {
       final v = await _get('/members/$id/memory') as Map<String, dynamic>;

@@ -3,6 +3,8 @@ import 'api.dart';
 import 'theme.dart';
 import 'screens/today.dart';
 import 'screens/plan.dart';
+import 'screens/discover.dart';
+import 'screens/insights.dart';
 import 'screens/health.dart';
 
 void main() => runApp(const RituvaApp());
@@ -93,6 +95,8 @@ class _HomeShellState extends State<HomeShell> {
     final screens = [
       TodayScreen(ctx: ctx!, targets: targets!, day: day!, plan: plan!, api: a, memberId: memberId),
       PlanScreen(plan: plan!, ctx: ctx!, api: a),
+      DiscoverScreen(api: a, plan: plan!),
+      InsightsScreen(plan: plan!, targets: targets!),
       HealthScreen(member: member!, targets: targets!, anthro: anthro!, api: a, memberId: memberId, onChanged: _load),
       ProfileScreen(
         members: members,
@@ -126,10 +130,13 @@ class _HomeShellState extends State<HomeShell> {
       bottomNavigationBar: NavigationBar(
         backgroundColor: R.bg2,
         selectedIndex: index,
+        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
         onDestinationSelected: (i) => setState(() => index = i),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Today'),
           NavigationDestination(icon: Icon(Icons.calendar_month_outlined), label: 'Plan'),
+          NavigationDestination(icon: Icon(Icons.explore_outlined), selectedIcon: Icon(Icons.explore), label: 'Discover'),
+          NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Insights'),
           NavigationDestination(icon: Icon(Icons.favorite_border), label: 'Health'),
           NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
         ],
