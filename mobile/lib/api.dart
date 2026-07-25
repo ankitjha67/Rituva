@@ -274,14 +274,41 @@ class RituvaApi {
   }
 
   Future<Map<String, dynamic>> adherence(String id, String day, String planId) async {
-    final v = await _get('/members/$id/adherence', {'date': day, 'plan_id': planId})
-        as Map<String, dynamic>;
-    offline = false;
-    return v;
+    try {
+      final v = await _get('/members/$id/adherence', {'date': day, 'plan_id': planId})
+          as Map<String, dynamic>;
+      offline = false;
+      return v;
+    } catch (e) {
+      if (_isNet(e)) {
+        offline = true;
+        throw OfflineException('Logging & adherence');
+      }
+      rethrow;
+    }
+  }
+
+  /// Log a day's dishes as eaten (each recipe expands to its ingredient BOM server-side).
+  Future<void> logDayAsEaten(String id, String day, List<String> recipeIds) async {
+    try {
+      await _post('/members/$id/intake', {
+        'date': day,
+        'items': [for (final r in recipeIds) {'recipe_id': r, 'scale': 1.0}],
+      });
+      offline = false;
+    } catch (e) {
+      if (_isNet(e)) {
+        offline = true;
+        throw OfflineException('Logging meals');
+      }
+      rethrow;
+    }
   }
 
   String exportUrl(String planId, {int people = 2}) =>
       '$baseUrl/plans/$planId/export.xlsx?people=$people';
+  String exportPdfUrl(String planId, {int people = 2}) =>
+      '$baseUrl/plans/$planId/export.pdf?people=$people';
 
   // ---------------------------------- offline system context (mirrors context.py) ----
   Map<String, dynamic> _localContext() {

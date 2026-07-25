@@ -23,13 +23,14 @@ from .planner import DeterministicPlanner, Ledger, season_for_month
 from .retrieval import retrieve
 from .targets import targets_report
 from .grocery import aggregate as grocery_aggregate
-from .export import plan_to_xlsx
+from .export import plan_to_xlsx, plan_to_pdf
 from fastapi.responses import Response
 
 # LLM config from the environment (optional). Only the friendly explanation uses the
 # LLM; every nutrient number is computed from the Knowledge DB regardless of provider.
 _LLM_PROVIDER = os.environ.get("RITUVA_LLM_PROVIDER", "none")
 _LLM_KEY = (os.environ.get("NVIDIA_API_KEY") or os.environ.get("OPENAI_API_KEY")
+            or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
             or os.environ.get("RITUVA_API_KEY", ""))
 
 app = FastAPI(title="Rituva API",
@@ -423,6 +424,22 @@ def plan_export_xlsx(plan_id: str, people: int = 1):
     return Response(content=data,
                     media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f'attachment; filename="rituva_plan_{plan_id}.xlsx"'})
+
+
+@app.get("/plans/{plan_id}/export.pdf")
+def plan_export_pdf(plan_id: str, people: int = 1):
+    """Download the plan + grocery as a printable PDF (numbers all DB-computed)."""
+    conn = _conn()
+    try:
+        pl = store.get_plan(conn, plan_id)
+        member = store.get_member(conn, pl["member_id"]) if pl else None
+    finally:
+        conn.close()
+    if not pl:
+        raise HTTPException(404, "plan not found")
+    data = plan_to_pdf(pl, member_name=member.name if member else "", people=people)
+    return Response(content=data, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="rituva_plan_{plan_id}.pdf"'})
 
 
 # ---- static PWA frontend (Phase D, PRD §17) ----

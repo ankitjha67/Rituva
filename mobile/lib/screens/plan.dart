@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../api.dart';
 import '../theme.dart';
 
@@ -25,11 +26,23 @@ class PlanScreen extends StatelessWidget {
                     style: const TextStyle(color: R.muted, fontSize: 12)),
               ],
             ),
-            FilledButton.tonalIcon(
-              onPressed: () => _grocery(context),
-              icon: const Icon(Icons.shopping_cart_outlined, size: 18),
-              label: const Text('Grocery'),
-            ),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              if (!'${plan['plan_id']}'.startsWith('demo'))
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.download_outlined),
+                  tooltip: 'Export',
+                  onSelected: (v) => _export(context, v),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'pdf', child: Text('Export PDF')),
+                    PopupMenuItem(value: 'xlsx', child: Text('Export Excel')),
+                  ],
+                ),
+              FilledButton.tonalIcon(
+                onPressed: () => _grocery(context),
+                icon: const Icon(Icons.shopping_cart_outlined, size: 18),
+                label: const Text('Grocery'),
+              ),
+            ]),
           ],
         ),
         const SizedBox(height: 4),
@@ -144,6 +157,16 @@ class PlanScreen extends StatelessWidget {
       return '${wd[d.weekday - 1]}, ${d.day} ${mo[d.month - 1]}';
     } catch (_) {
       return iso;
+    }
+  }
+
+  Future<void> _export(BuildContext context, String kind) async {
+    final id = plan['plan_id'] as String;
+    final url = kind == 'pdf' ? api.exportPdfUrl(id) : api.exportUrl(id);
+    final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not open export — connect a server in Profile.')));
     }
   }
 

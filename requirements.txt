@@ -14,6 +14,7 @@ fastapi>=0.110       # REST API layer (PRD §12.5)
 uvicorn>=0.29        # ASGI server
 langgraph>=0.2       # stateful orchestration graph (PRD §9.7) — optional
 openpyxl>=3.1        # .xlsx export/import for Excel parity (PRD §11.3)
+fpdf2>=2.7           # PDF export of the plan (/plans/{id}/export.pdf)
 pytest>=8.0          # test runner (tests also run standalone without it)
 
 # LLM providers are reached over their OpenAI-compatible HTTP endpoints using the

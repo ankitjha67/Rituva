@@ -34,7 +34,101 @@ class TodayScreen extends StatelessWidget {
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
         const SizedBox(height: 8),
         ...entries.map((e) => _mealCard(context, e as Map)),
+        const SizedBox(height: 12),
+        FilledButton.tonalIcon(
+          onPressed: () => _logAndAdhere(context),
+          icon: const Icon(Icons.check_circle_outline, size: 18),
+          label: const Text("Log today's meals as eaten"),
+        ),
       ],
+    );
+  }
+
+  /// Log every dish on today's plan as eaten, then show adherence (actual vs plan vs target).
+  Future<void> _logAndAdhere(BuildContext context) async {
+    final ids = <String>[];
+    for (final e in (day['entries'] as List)) {
+      for (final c in (e['components'] as List)) {
+        if (c['recipe_id'] != null) ids.add('${c['recipe_id']}');
+      }
+    }
+    try {
+      await api.logDayAsEaten(memberId, day['date'] as String, ids);
+      final adh = await api.adherence(memberId, day['date'] as String, plan['plan_id'] as String);
+      if (context.mounted) _showAdherence(context, adh);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  void _showAdherence(BuildContext context, Map<String, dynamic> adh) {
+    final rows = (adh['per_nutrient'] as List?) ?? const [];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: R.bg2,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: .6,
+        maxChildSize: .9,
+        minChildSize: .3,
+        expand: false,
+        builder: (c, sc) => ListView(
+          controller: sc,
+          padding: const EdgeInsets.all(16),
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Expanded(
+                  child: Text('Adherence · actual vs plan vs target',
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                ),
+                Text('${adh['score'] ?? 0}%',
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: R.gold)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ...rows.map((r) {
+              final pct = ((r['pct_of_target'] as num?)?.toDouble() ?? 0).clamp(0.0, 100.0);
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('${r['nutrient']}'.toUpperCase(),
+                            style: const TextStyle(color: R.muted, fontSize: 11)),
+                        Text(
+                          '${r['actual']} / ${r['target']} ${r['unit'] ?? ''}'
+                          '${r['planned'] != null ? ' · plan ${r['planned']}' : ''}',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(9),
+                      child: LinearProgressIndicator(
+                        value: pct / 100,
+                        minHeight: 7,
+                        backgroundColor: R.line,
+                        color: (pct >= 90 && pct <= 120) ? R.green : R.gold,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: 10),
+            const Text('◆ Actuals summed from the Knowledge DB — never invented.',
+                style: TextStyle(color: R.teal, fontSize: 11)),
+          ],
+        ),
+      ),
     );
   }
 

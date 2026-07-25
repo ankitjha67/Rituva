@@ -28,6 +28,9 @@ NVIDIA_DEFAULTS = [
 ]
 OPENAI_BASE = "https://api.openai.com/v1"
 OLLAMA_BASE = "http://localhost:11434/v1"
+# Google Gemini exposes an OpenAI-compatible endpoint — no vendor SDK needed.
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
+GEMINI_DEFAULTS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
 
 
 @dataclass
@@ -131,6 +134,8 @@ def make_provider(provider: str, api_key: str = "") -> LLMProvider:
         return OpenAICompatible("openai", OPENAI_BASE, api_key, ["gpt-4o-mini", "gpt-4o"])
     if provider == "ollama":
         return OpenAICompatible("ollama", OLLAMA_BASE, api_key, ["qwen2.5:7b-instruct"])
+    if provider in ("gemini", "google", "vertex"):
+        return OpenAICompatible("gemini", GEMINI_BASE, api_key, GEMINI_DEFAULTS)
     # treat unknown as an OpenAI-compatible custom endpoint given as base_url
     return OpenAICompatible(provider, provider, api_key)
 

@@ -65,3 +65,64 @@ def plan_to_xlsx(plan: dict, member_name: str = "", people: int = 1) -> bytes:
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def plan_to_pdf(plan: dict, member_name: str = "", people: int = 1) -> bytes:
+    """Render the plan + grocery as a printable PDF (fpdf2). Values are DB-computed;
+    this only formats. Core fonts are latin-1, so text is sanitized to latin-1."""
+    from fpdf import FPDF
+
+    def s(x):
+        return str(x).encode("latin-1", "replace").decode("latin-1")
+
+    pdf = FPDF(format="A4")
+    pdf.set_auto_page_break(True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_text_color(20, 20, 16)
+    pdf.cell(0, 10, s("Rituva - Weekly Plan"), ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(90, 90, 90)
+    t = plan.get("targets", {})
+    who = member_name or plan.get("member_id", "")
+    pdf.cell(0, 6, s(f"{who}   target {t.get('kcal', '')} kcal - protein {t.get('protein_g', '')} g "
+                     f"- {t.get('source', '')}"), ln=True)
+    pdf.ln(2)
+
+    order = ["breakfast", "snack1", "lunch", "snack2", "dinner"]
+    for d in plan.get("days", []):
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_text_color(20, 20, 16)
+        pdf.cell(0, 8, s(f"{d['date']}    {round(d['totals']['kcal'])} kcal - DQS {d['validation']['dqs']}"), ln=True)
+        by = {e["slot"]: e for e in d["entries"]}
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(50, 50, 50)
+        for slot in order:
+            e = by.get(slot)
+            if not e:
+                continue
+            names = " + ".join(c["name"] for c in e["components"])
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(0, 6, s(f"{slot.capitalize()}:  {names}  ({round(e['nutrients']['kcal'])} kcal)"))
+        pdf.ln(1)
+
+    pdf.add_page()
+    g = aggregate(plan, people=people)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(20, 20, 16)
+    pdf.cell(0, 9, s(f"Grocery - {g['total_items']} items - {g['people']} people"), ln=True)
+    for cat in g["categories"]:
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(30, 30, 30)
+        pdf.cell(0, 7, s(cat["category"]), ln=True)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(50, 50, 50)
+        for it in cat["items"]:
+            pdf.cell(0, 5.5, s(f"   {it['item']}  -  {it['quantity']} {it['unit']}"), ln=True)
+
+    pdf.ln(3)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_text_color(120, 120, 120)
+    pdf.multi_cell(0, 4, s("All nutrient values are computed from the Knowledge DB (IFCT 2017 / DGI 2024). "
+                           "Guideline-based general nutrition - not medical advice."))
+    return bytes(pdf.output())
