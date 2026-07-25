@@ -23,7 +23,7 @@ gcloud services enable run.googleapis.com sqladmin.googleapis.com secretmanager.
 
 ## 1. Cloud SQL (Postgres 16)
 ```
-gcloud sql instances create rituva-db --database-version=POSTGRES_16 --tier=db-f1-micro --region=asia-south1
+gcloud sql instances create rituva-db --database-version=POSTGRES_16 --edition=ENTERPRISE --tier=db-f1-micro --region=asia-south1
 gcloud sql databases create rituva --instance=rituva-db
 gcloud sql users set-password postgres --instance=rituva-db --password=CHOOSE_A_STRONG_PW
 gcloud sql instances describe rituva-db --format="value(connectionName)"
