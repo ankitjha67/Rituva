@@ -81,6 +81,7 @@ class Ledger:
         self.hero_days: Dict[str, List[int]] = {}     # food_id -> [day idx]
         self.pulse_days: Dict[str, List[int]] = {}
         self.region_days: Dict[str, List[int]] = {}
+        self.fmt_days: Dict[str, List[int]] = {}      # dish format (chilla/dosa/sabzi…) -> [day idx]
         self.reasons: List[str] = []
 
     @staticmethod
@@ -113,6 +114,10 @@ class Ledger:
         if r.region and not self.single_region:
             if self._count(self.region_days.get(r.region.value, []), di) >= self.p["region_days_per_week"]:
                 return False
+        # dish-format weekly cap — variety across formats (no 7 chillas / a week of sabzi)
+        if "staple" not in r.tags:
+            if self._count(self.fmt_days.get(_format(r), []), di) >= self.p.get("format_per_week", 3):
+                return False
         return True
 
     def allowed(self, r: Recipe, di: int) -> bool:
@@ -127,6 +132,7 @@ class Ledger:
                 self.pulse_days.setdefault(ing.food_id, []).append(di)
         if r.region:
             self.region_days.setdefault(r.region.value, []).append(di)
+        self.fmt_days.setdefault(_format(r), []).append(di)
 
     def days_since(self, r: Recipe, di: int) -> int:
         last = self.dish_last.get(r.id)
@@ -136,12 +142,32 @@ class Ledger:
 # ---------------------------------------------------------------------------
 # Selection
 # ---------------------------------------------------------------------------
+_FORMATS = {
+    "chilla", "cheela", "chila", "paratha", "dosa", "idli", "uttapam", "pesarattu",
+    "upma", "poha", "porridge", "pongal", "dhokla", "thepla", "adai",
+    "sabzi", "bhaji", "masala", "curry", "poriyal", "thoran", "bhaja", "fry", "kadhi",
+    "kofta", "bharta", "tadka", "khichdi", "pulao", "biryani", "raita", "roti",
+    "sambar", "rasam", "stew", "roast", "bhurji", "tikka", "salad", "soup", "ghugni",
+}
+
+
+def _format(r: Recipe) -> str:
+    """Coarse dish 'format' for variety capping (e.g. chilla / dosa / sabzi)."""
+    for w in reversed(r.name.lower().replace("(", " ").replace(")", " ").replace("-", " ").split()):
+        w = w.strip(".,")
+        if w in _FORMATS:
+            return w
+    words = r.name.lower().split()   # fall back to the last word
+    return words[-1] if words else r.id
+
+
 def _score(r: Recipe, member: Member, ledger: Ledger, di: int) -> float:
     s = 0.0
     if r.region in member.region_prefs:
         s += 3.0
     if "high_protein" in r.tags and member.goal == Goal.MUSCLE:
         s += 2.0
+    s -= ledger._count(ledger.fmt_days.get(_format(r), []), di, window=2) * 0.9   # spread formats (no back-to-back chillas)
     s += min(ledger.days_since(r, di), 12) * 0.1            # favour least-recently-used
     # Stable tie-break for variety. NB: Python's built-in hash() of a str is salted by
     # PYTHONHASHSEED, so it varies per process — using it here made plans (and tests, and

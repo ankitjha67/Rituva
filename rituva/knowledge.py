@@ -320,6 +320,7 @@ FREQUENCY_POLICY = {
     },
     "pulse_per_week": 2,              # any single pulse ≤ 2/week
     "region_days_per_week": 3,        # any one region ≤ 3 days/week (unless single-region user)
+    "format_per_week": 3,             # any one dish format (chilla/dosa/sabzi…) ≤ 3/week — variety
 }
 
 EQUIVALENCE_CLASSES = {
