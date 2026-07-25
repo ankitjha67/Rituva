@@ -46,8 +46,11 @@ jobs:
 
       - name: Generate android/ scaffolding (not committed to git)
         run: |
-          flutter create --platforms=android --org io.rituva --project-name rituva /tmp/scaffold
+          # Scaffold both platforms so flutter_launcher_icons (android+ios) has both
+          # target folders; only android/ is actually built into the APK below.
+          flutter create --platforms=android,ios --org io.rituva --project-name rituva /tmp/scaffold
           cp -r /tmp/scaffold/android ./android
+          cp -r /tmp/scaffold/ios ./ios
           # Add INTERNET permission (Flutter only adds it to debug builds) and allow
           # cleartext HTTP so a self-hosted dev backend is reachable.
           sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application android:usesCleartextTraffic="true"#' android/app/src/main/AndroidManifest.xml

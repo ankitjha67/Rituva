@@ -36,8 +36,11 @@ jobs:
 
       - name: Generate ios/ scaffolding (not committed to git)
         run: |
-          flutter create --platforms=ios --org io.rituva --project-name rituva /tmp/scaffold_ios
+          # Scaffold both platforms so flutter_launcher_icons (android+ios) has both
+          # target folders; only ios/ is actually built below.
+          flutter create --platforms=android,ios --org io.rituva --project-name rituva /tmp/scaffold_ios
           cp -R /tmp/scaffold_ios/ios ./ios
+          cp -R /tmp/scaffold_ios/android ./android
           # Allow cleartext HTTP to a self-hosted dev backend (App Transport Security).
           PLIST=ios/Runner/Info.plist
           /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity" "$PLIST" 2>/dev/null || true
