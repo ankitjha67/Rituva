@@ -151,3 +151,9 @@ uvicorn rituva.api:app --reload   # API + Swagger at /docs; PWA at http://localh
   section. **Genericized ALL personal data** for the public repo (seed profiles → Aarav/Diya with
   generic conditions; design mockups; PRD persona; demo id ankit→aarav / wife→diya) — pytest 14/14.
   The real household profile lives only in local `.claude/` memory (gitignored).
+- **2026-07-25 (Claude Code, APK live):** CI green. Backend-tests ✅. Fixed the APK workflow
+  (moved the Gradle cache to after `flutter create`, since no gradle files exist at `setup-java`
+  time). **APK built successfully in GitHub Actions** → `Rituva-b3.apk` (~47 MB) attached to the
+  **`latest`** prerelease and the **`v0.1.0`** release. Direct download:
+  https://github.com/ankitjha67/Rituva/releases/latest . Future pushes/releases rebuild it
+  automatically. **GitHub upload + APK task COMPLETE.** Next queued: Flutter Insights/Discover screens.

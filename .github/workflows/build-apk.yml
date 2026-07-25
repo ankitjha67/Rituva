@@ -11,6 +11,9 @@ name: Build Android APK
 on:
   push:
     branches: [ main ]
+    paths-ignore:      # docs-only changes don't need a 20-min APK rebuild
+      - "**.md"
+      - "design/**"
   release:
     types: [ published ]
   workflow_dispatch:
