@@ -74,9 +74,10 @@ def base_pool(role: Role, member: Member, season: Season) -> List[Recipe]:
 # Frequency + uniqueness ledger (PRD §8)
 # ---------------------------------------------------------------------------
 class Ledger:
-    def __init__(self, policy: dict = FREQUENCY_POLICY, single_region: bool = False):
+    def __init__(self, policy: dict = FREQUENCY_POLICY, single_region: bool = False, variant: int = 0):
         self.p = policy
         self.single_region = single_region
+        self.variant = variant       # regenerate: reshuffles the tie-break for a different plan
         self.dish_last: Dict[str, int] = {}          # recipe_id -> day index
         self.hero_days: Dict[str, List[int]] = {}     # food_id -> [day idx]
         self.pulse_days: Dict[str, List[int]] = {}
@@ -172,7 +173,8 @@ def _score(r: Recipe, member: Member, ledger: Ledger, di: int) -> float:
     # Stable tie-break for variety. NB: Python's built-in hash() of a str is salted by
     # PYTHONHASHSEED, so it varies per process — using it here made plans (and tests, and
     # the offline demo) non-reproducible. crc32 is stable across processes.
-    s += ((zlib.crc32(r.id.encode()) + di * 7) % 5) * 0.06
+    tie = zlib.crc32(r.id.encode() if ledger.variant == 0 else f"{r.id}:{ledger.variant}".encode())
+    s += ((tie + di * 7) % 5) * 0.06
     return s
 
 
@@ -194,10 +196,10 @@ class DeterministicPlanner:
     def __init__(self, policy: dict = FREQUENCY_POLICY):
         self.policy = policy
 
-    def plan(self, member: Member, targets: NutrientTargets,
-             start: date, days: int) -> List[Tuple[DayPlan, ValidationReport]]:
+    def plan(self, member: Member, targets: NutrientTargets, start: date, days: int,
+             variant: int = 0) -> List[Tuple[DayPlan, ValidationReport]]:
         single_region = len(member.region_prefs) == 1
-        ledger = Ledger(self.policy, single_region=single_region)
+        ledger = Ledger(self.policy, single_region=single_region, variant=variant)
         out: List[Tuple[DayPlan, ValidationReport]] = []
         for di in range(days):
             d = start + timedelta(days=di)

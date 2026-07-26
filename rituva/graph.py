@@ -34,6 +34,7 @@ class PipelineState:
     member: Member
     start: date
     days: int
+    variant: int = 0
     gateway: Optional[FallbackRouter] = None
     targets: Optional[NutrientTargets] = None
     info: dict = field(default_factory=dict)
@@ -69,7 +70,7 @@ def node_retrieve(s: PipelineState) -> PipelineState:
 
 
 def node_plan(s: PipelineState) -> PipelineState:
-    s.plan = DeterministicPlanner().plan(s.member, s.targets, s.start, s.days)
+    s.plan = DeterministicPlanner().plan(s.member, s.targets, s.start, s.days, variant=s.variant)
     return s
 
 
@@ -119,14 +120,14 @@ def _run_langgraph(s: PipelineState) -> PipelineState:
 
 
 def run(member: Member, start: date, days: int,
-        provider: str = "none", api_key: str = "", conn=None) -> PipelineState:
+        provider: str = "none", api_key: str = "", conn=None, variant: int = 0) -> PipelineState:
     """Run the pipeline. Pass a store connection as `conn` to fold the member's
     long-term memory (never/dislike) into their exclusions first (PRD §9.7)."""
     if conn is not None:
         from .memory import apply_memory
         member = apply_memory(conn, member)
     gateway = build_gateway(provider, api_key) if provider not in ("none", "", None) else None
-    state = PipelineState(member=member, start=start, days=days, gateway=gateway)
+    state = PipelineState(member=member, start=start, days=days, gateway=gateway, variant=variant)
     result = _run_langgraph(state)
     # StateGraph.invoke may return a dict-like; normalise back to PipelineState
     if isinstance(result, dict):

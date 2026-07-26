@@ -6,6 +6,8 @@ import 'screens/plan.dart';
 import 'screens/discover.dart';
 import 'screens/insights.dart';
 import 'screens/health.dart';
+import 'screens/profile_edit.dart';
+import 'screens/meal_chat.dart';
 
 void main() => runApp(const RituvaApp());
 
@@ -33,6 +35,7 @@ class _HomeShellState extends State<HomeShell> {
   bool offline = false;
   String? error;
   String memberId = 'aarav';
+  int variant = 0;
   Map<String, dynamic>? ctx, member, targets, anthro, plan, day;
   List members = [];
 
@@ -58,7 +61,7 @@ class _HomeShellState extends State<HomeShell> {
       final t = await a.targets(memberId);
       targets = t['targets'] as Map<String, dynamic>;
       anthro = t['anthropometry'] as Map<String, dynamic>;
-      plan = await a.createPlan(memberId, days: 7, start: ctx!['today'] as String);
+      plan = await a.createPlan(memberId, days: 7, start: ctx!['today'] as String, variant: variant);
       final days = plan!['days'] as List;
       day = days.firstWhere((d) => d['date'] == ctx!['today'], orElse: () => days.first)
           as Map<String, dynamic>;
@@ -78,6 +81,41 @@ class _HomeShellState extends State<HomeShell> {
   Future<void> _saveServer(String url) async {
     await api?.setBaseUrl(url);
     await _load();
+  }
+
+  Future<void> _regenerate() async {
+    final a = api;
+    if (a == null || ctx == null || loading) return;
+    setState(() => loading = true);
+    variant++;
+    try {
+      plan = await a.createPlan(memberId, days: 7, start: ctx!['today'] as String, variant: variant);
+      final days = plan!['days'] as List;
+      day = days.firstWhere((d) => d['date'] == ctx!['today'], orElse: () => days.first) as Map<String, dynamic>;
+      offline = a.offline;
+    } catch (e) {
+      error = '$e';
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  void _openChat() {
+    if (offline || plan == null || day == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Connect a server (Profile → Server) to chat about your meals.')));
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: R.bg2,
+      isScrollControlled: true,
+      builder: (_) => MealChatSheet(
+        api: api!,
+        memberId: memberId,
+        planId: plan!['plan_id'] as String,
+        date: day!['date'] as String,
+      ),
+    );
   }
 
   @override
@@ -101,10 +139,13 @@ class _HomeShellState extends State<HomeShell> {
       InsightsScreen(plan: plan!, targets: targets!),
       HealthScreen(member: member!, targets: targets!, anthro: anthro!, api: a, memberId: memberId, onChanged: _load),
       ProfileScreen(
+        api: a,
         members: members,
         memberId: memberId,
+        member: member!,
         plan: plan!,
         onSwitch: _switchMember,
+        onSaved: _load,
         serverUrl: a.baseUrl,
         offline: offline,
         onSaveServer: _saveServer,
@@ -122,6 +163,13 @@ class _HomeShellState extends State<HomeShell> {
                 style: const TextStyle(color: R.muted, fontSize: 12)),
           ],
         ),
+        actions: [
+          IconButton(
+              tooltip: 'Ask about meals',
+              icon: const Icon(Icons.auto_awesome_outlined),
+              onPressed: _openChat),
+          IconButton(tooltip: 'Regenerate meals', icon: const Icon(Icons.refresh), onPressed: _regenerate),
+        ],
       ),
       body: Column(
         children: [
@@ -235,19 +283,25 @@ class _ErrorScreenState extends State<_ErrorScreen> {
 
 /// Profile: member switch, provenance, and the backend Server URL setting.
 class ProfileScreen extends StatefulWidget {
+  final RituvaApi api;
   final List members;
   final String memberId;
+  final Map<String, dynamic> member;
   final Map<String, dynamic> plan;
   final Future<void> Function(String) onSwitch;
+  final Future<void> Function() onSaved;
   final String serverUrl;
   final bool offline;
   final Future<void> Function(String) onSaveServer;
   const ProfileScreen({
     super.key,
+    required this.api,
     required this.members,
     required this.memberId,
+    required this.member,
     required this.plan,
     required this.onSwitch,
+    required this.onSaved,
     required this.serverUrl,
     required this.offline,
     required this.onSaveServer,
@@ -263,6 +317,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void dispose() {
     urlCtrl.dispose();
     super.dispose();
+  }
+
+  void _editProfile(BuildContext context, Map<String, dynamic>? m) {
+    if (widget.offline) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Connect a server (Server card below) to create or edit profiles.')));
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (_) => ProfileEditScreen(api: widget.api, member: m, onSaved: widget.onSaved)),
+    );
   }
 
   @override
@@ -284,6 +351,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ))
               .toList(),
         ),
+        const SizedBox(height: 10),
+        Card(
+          color: R.surface,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${widget.member['name']} · ${humanize('${widget.member['diet_type']}')} · ${humanize('${widget.member['goal']}')}',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Age ${widget.member['age']} · ${widget.member['weight_kg']}kg · ${widget.member['height_cm']}cm'
+                  '${(widget.member['conditions'] as List?)?.isNotEmpty == true ? ' · ${(widget.member['conditions'] as List).map((c) => humanize('$c')).join(', ')}' : ''}',
+                  style: const TextStyle(color: R.muted, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _editProfile(context, widget.member),
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Edit profile'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton.tonalIcon(
+              onPressed: () => _editProfile(context, null),
+              icon: const Icon(Icons.person_add_outlined, size: 18),
+              label: const Text('New profile'),
+            ),
+          ),
+        ]),
         const SizedBox(height: 18),
         // ---- Server URL ----
         const Text('SERVER', style: TextStyle(color: R.muted, fontSize: 11, letterSpacing: 1.2)),

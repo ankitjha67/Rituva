@@ -83,6 +83,13 @@ class PlanIn(BaseModel):
     member_id: str
     days: int = 7
     start: Optional[str] = None
+    variant: int = 0          # bump to regenerate a different plan
+
+
+class AskIn(BaseModel):
+    question: str
+    date: Optional[str] = None
+    plan_id: Optional[str] = None
 
 
 class MemoryIn(BaseModel):
@@ -174,7 +181,7 @@ def create_plan(p: PlanIn):
         start = date.fromisoformat(p.start) if p.start else detect().today
         # graph.run folds long-term memory into exclusions, retrieves the cited
         # rules for provenance, plans deterministically, then explains (PRD §9.7).
-        state = graph.run(m, start, p.days, provider=_LLM_PROVIDER, api_key=_LLM_KEY, conn=conn)
+        state = graph.run(m, start, p.days, provider=_LLM_PROVIDER, api_key=_LLM_KEY, conn=conn, variant=p.variant)
         t = state.targets
         plan = state.plan
         days = [store.day_to_dict(dp, rep) for dp, rep in plan]
@@ -280,6 +287,43 @@ def list_recipes(region: Optional[str] = None, role: Optional[str] = None,
         if len(out) >= limit:
             break
     return {"count": len(out), "recipes": out}
+
+
+@app.post("/members/{member_id}/ask")
+def ask(member_id: str, body: AskIn):
+    """Ask the LLM about today's meals (trivia / nutrition Q&A), grounded in the plan's
+    DB-computed nutrients. The model may add culinary context but must not invent numbers."""
+    conn = _conn()
+    try:
+        m = store.get_member(conn, member_id)
+        pl = store.get_plan(conn, body.plan_id) if body.plan_id else None
+    finally:
+        conn.close()
+    if not m:
+        raise HTTPException(404, "member not found")
+    meals_ctx = ""
+    if pl and pl.get("days"):
+        day = next((d for d in pl["days"] if d["date"] == body.date), pl["days"][0])
+        lines = []
+        for e in day["entries"]:
+            names = " + ".join(c["name"] for c in e["components"])
+            n = e["nutrients"]
+            lines.append(f"- {e['slot']}: {names} ({round(n['kcal'])} kcal, "
+                         f"{round(n['protein'])} g protein, {round(n['fibre'])} g fibre)")
+        meals_ctx = f"{m.name}'s meals on {day['date']}:\n" + "\n".join(lines)
+    if _LLM_PROVIDER in ("none", "", None):
+        return {"answer": "Add an LLM key (set NVIDIA_API_KEY in the server's .env) to chat about your meals.",
+                "llm": "none"}
+    from .gateway import build_gateway
+    gw = build_gateway(_LLM_PROVIDER, _LLM_KEY)
+    prompt = ("You are Rituva, a warm, concise Indian nutrition assistant. "
+              f"{meals_ctx}\n\nUser question: {body.question}\n\n"
+              "Answer in 2-4 sentences. You may share culinary or nutrition trivia about these dishes. "
+              "Use ONLY the nutrient numbers given above; never invent specific nutrient values.")
+    res = gw.generate(prompt, prefer_fast=True)
+    return {"answer": (res.text.strip() if res.ok and res.text.strip()
+                       else "Sorry, the assistant is unavailable right now."),
+            "llm": res.provider, "model": res.model}
 
 
 # ---- long-term memory: never / dislike / like (PRD §9.7, §17.4) ----

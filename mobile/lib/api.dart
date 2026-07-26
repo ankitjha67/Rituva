@@ -186,10 +186,11 @@ class RituvaApi {
     }
   }
 
-  Future<Map<String, dynamic>> createPlan(String id, {int days = 7, String? start}) async {
+  Future<Map<String, dynamic>> createPlan(String id, {int days = 7, String? start, int variant = 0}) async {
     if (offline) return _member(await _bundle(), id)['plan'] as Map<String, dynamic>;
     try {
-      final v = await _post('/plans', {'member_id': id, 'days': days, if (start != null) 'start': start})
+      final v = await _post('/plans',
+              {'member_id': id, 'days': days, 'variant': variant, if (start != null) 'start': start})
           as Map<String, dynamic>;
       offline = false;
       return v;
@@ -322,6 +323,40 @@ class RituvaApi {
       if (_isNet(e)) {
         offline = true;
         throw OfflineException('Logging meals');
+      }
+      rethrow;
+    }
+  }
+
+  /// Create or update a member profile (server upserts by id). Server-only.
+  Future<Map<String, dynamic>> saveMember(Map<String, dynamic> m) async {
+    try {
+      final v = await _post('/members', m) as Map<String, dynamic>;
+      offline = false;
+      return v;
+    } catch (e) {
+      if (_isNet(e)) {
+        offline = true;
+        throw OfflineException('Saving a profile');
+      }
+      rethrow;
+    }
+  }
+
+  /// Ask the LLM about a day's meals (trivia / Q&A, grounded in the DB). Server-only.
+  Future<String> ask(String id, String question, {String? planId, String? date}) async {
+    try {
+      final v = await _post('/members/$id/ask', {
+        'question': question,
+        if (planId != null) 'plan_id': planId,
+        if (date != null) 'date': date,
+      }) as Map<String, dynamic>;
+      offline = false;
+      return '${v['answer'] ?? ''}';
+    } catch (e) {
+      if (_isNet(e)) {
+        offline = true;
+        throw OfflineException('The meal assistant');
       }
       rethrow;
     }
