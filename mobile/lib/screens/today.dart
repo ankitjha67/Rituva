@@ -7,6 +7,8 @@ class TodayScreen extends StatelessWidget {
   final Map<String, dynamic> ctx, targets, day, plan;
   final RituvaApi api;
   final String memberId;
+  final Future<void> Function() onRegenerate;
+  final bool regenerating;
   const TodayScreen({
     super.key,
     required this.ctx,
@@ -15,6 +17,8 @@ class TodayScreen extends StatelessWidget {
     required this.plan,
     required this.api,
     required this.memberId,
+    required this.onRegenerate,
+    required this.regenerating,
   });
 
   @override
@@ -25,18 +29,35 @@ class TodayScreen extends StatelessWidget {
     final cites = ((plan['provenance']?['citations']) as List?) ?? const [];
     final entries = day['entries'] as List;
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: kScreenPad,
       children: [
         _energyCard(kcal, tgtKcal, totals),
         if (cites.isNotEmpty) _citeCard(cites.first as Map),
         if ('${plan['explanation'] ?? ''}'.trim().isNotEmpty)
           _aiCard('${plan['explanation']}', '${(plan['provenance'] as Map?)?['llm_provider'] ?? ''}'),
-        const SizedBox(height: 14),
-        const Text("Today's menu · tap to swap",
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-        const SizedBox(height: 8),
+        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Expanded(
+              child: Text("Today's menu · tap a dish to swap",
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+            ),
+            TextButton.icon(
+              onPressed: regenerating ? null : onRegenerate,
+              style: TextButton.styleFrom(
+                  foregroundColor: R.gold, padding: const EdgeInsets.symmetric(horizontal: 8)),
+              icon: regenerating
+                  ? const SizedBox(
+                      width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: R.gold))
+                  : const Icon(Icons.refresh, size: 18),
+              label: const Text('Regenerate'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
         ...entries.map((e) => _mealCard(context, e as Map)),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         FilledButton.tonalIcon(
           onPressed: () => _logAndAdhere(context),
           icon: const Icon(Icons.check_circle_outline, size: 18),
@@ -71,6 +92,7 @@ class TodayScreen extends StatelessWidget {
       context: context,
       backgroundColor: R.bg2,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => DraggableScrollableSheet(
         initialChildSize: .6,
         maxChildSize: .9,
@@ -295,6 +317,7 @@ class TodayScreen extends StatelessWidget {
       context: context,
       backgroundColor: R.bg2,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => FutureBuilder(
         future: api.alternatives(memberId, recipeId, day['date'] as String),
         builder: (c, snap) {

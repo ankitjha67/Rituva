@@ -100,7 +100,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         backgroundColor: R.bg,
         title: Text(widget.member == null ? 'New profile' : 'Edit profile'),
       ),
-      body: ListView(
+      body: SafeArea(
+        top: false,
+        child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           _tf(name, 'Name'),
@@ -161,6 +163,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           ),
           const SizedBox(height: 30),
         ],
+        ),
       ),
     );
   }

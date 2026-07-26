@@ -112,7 +112,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         ),
         Expanded(
           child: ListView.builder(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 32),
             itemCount: list.length,
             itemBuilder: (c, i) {
               final r = list[i] as Map;

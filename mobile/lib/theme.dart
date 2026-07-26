@@ -25,6 +25,23 @@ class R {
   }
 }
 
+/// Standard scroll padding for a tab body — the extra bottom clears the
+/// navigation bar / gesture area so the last card or button is never cramped.
+const EdgeInsets kScreenPad = EdgeInsets.fromLTRB(16, 16, 16, 32);
+
+/// "2026-07-26" → "Sat, 26 Jul" (falls back to the raw string on any parse issue).
+String prettyDate(Object? iso) {
+  final s = '${iso ?? ''}';
+  try {
+    final d = DateTime.parse(s);
+    const wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${wd[d.weekday - 1]}, ${d.day} ${mo[d.month - 1]}';
+  } catch (_) {
+    return s;
+  }
+}
+
 Color regionColor(String? r) {
   switch (r) {
     case 'north':

@@ -25,7 +25,7 @@ class InsightsScreen extends StatelessWidget {
     ];
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: kScreenPad,
       children: [
         Card(
           color: R.surface,

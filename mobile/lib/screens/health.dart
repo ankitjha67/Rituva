@@ -52,7 +52,7 @@ class _HealthScreenState extends State<HealthScreen> {
       ...(((mem?['memory']?['dislike']) as List?) ?? const []),
     ];
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: kScreenPad,
       children: [
         Card(
           color: R.surface,

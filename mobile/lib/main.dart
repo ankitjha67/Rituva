@@ -31,7 +31,8 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   RituvaApi? api;
   int index = 0;
-  bool loading = true;
+  bool loading = true;   // full-screen: first load & member switch
+  bool busy = false;     // inline: regenerate — keeps the UI mounted
   bool offline = false;
   String? error;
   String memberId = 'aarav';
@@ -85,30 +86,40 @@ class _HomeShellState extends State<HomeShell> {
 
   Future<void> _regenerate() async {
     final a = api;
-    if (a == null || ctx == null || loading) return;
-    setState(() => loading = true);
+    if (a == null || ctx == null || loading || busy) return;
+    if (offline) {
+      _snack('Connect a server (Profile → Server) to regenerate your menu.');
+      return;
+    }
+    setState(() => busy = true);   // inline — the screen stays mounted, a thin bar shows progress
     variant++;
     try {
-      plan = await a.createPlan(memberId, days: 7, start: ctx!['today'] as String, variant: variant);
-      final days = plan!['days'] as List;
+      final fresh = await a.createPlan(memberId, days: 7, start: ctx!['today'] as String, variant: variant);
+      final days = fresh['days'] as List;
+      plan = fresh;
       day = days.firstWhere((d) => d['date'] == ctx!['today'], orElse: () => days.first) as Map<String, dynamic>;
       offline = a.offline;
+      if (mounted) _snack('Fresh menu ready — a new mix of dishes for the week.');
     } catch (e) {
-      error = '$e';
+      if (mounted) _snack('Could not regenerate: $e');
     }
-    if (mounted) setState(() => loading = false);
+    if (mounted) setState(() => busy = false);
   }
+
+  void _snack(String s) => ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(s), behavior: SnackBarBehavior.floating));
 
   void _openChat() {
     if (offline || plan == null || day == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Connect a server (Profile → Server) to chat about your meals.')));
+      _snack('Connect a server (Profile → Server) to chat about your meals.');
       return;
     }
     showModalBottomSheet(
       context: context,
       backgroundColor: R.bg2,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => MealChatSheet(
         api: api!,
         memberId: memberId,
@@ -133,8 +144,16 @@ class _HomeShellState extends State<HomeShell> {
     }
     final a = api!;
     final screens = [
-      TodayScreen(ctx: ctx!, targets: targets!, day: day!, plan: plan!, api: a, memberId: memberId),
-      PlanScreen(plan: plan!, ctx: ctx!, api: a),
+      TodayScreen(
+          ctx: ctx!,
+          targets: targets!,
+          day: day!,
+          plan: plan!,
+          api: a,
+          memberId: memberId,
+          onRegenerate: _regenerate,
+          regenerating: busy),
+      PlanScreen(plan: plan!, ctx: ctx!, api: a, onRegenerate: _regenerate, regenerating: busy),
       DiscoverScreen(api: a, plan: plan!),
       InsightsScreen(plan: plan!, targets: targets!),
       HealthScreen(member: member!, targets: targets!, anthro: anthro!, api: a, memberId: memberId, onChanged: _load),
@@ -154,26 +173,41 @@ class _HomeShellState extends State<HomeShell> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: R.bg,
+        titleSpacing: 16,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text('${ctx?['greeting'] ?? 'Rituva'}, ${member?['name'] ?? ''}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
-            Text('${ctx?['today'] ?? ''} · ${ctx?['season'] ?? ''}',
+            Text('${prettyDate(ctx?['today'])} · ${humanize('${ctx?['season'] ?? ''}')}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: R.muted, fontSize: 12)),
           ],
         ),
         actions: [
           IconButton(
               tooltip: 'Ask about meals',
-              icon: const Icon(Icons.auto_awesome_outlined),
+              icon: const Icon(Icons.forum_outlined),
               onPressed: _openChat),
-          IconButton(tooltip: 'Regenerate meals', icon: const Icon(Icons.refresh), onPressed: _regenerate),
+          IconButton(
+            tooltip: 'Regenerate menu',
+            onPressed: busy ? null : _regenerate,
+            icon: busy
+                ? const SizedBox(
+                    width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: R.gold))
+                : const Icon(Icons.refresh),
+          ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
         children: [
-          if (offline) const _OfflineBanner(),
+          if (busy) const LinearProgressIndicator(minHeight: 2, color: R.gold, backgroundColor: R.line),
+          if (offline) _OfflineBanner(onTap: () => setState(() => index = 5)),
           Expanded(child: IndexedStack(index: index, children: screens)),
         ],
       ),
@@ -196,22 +230,29 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 /// Thin strip shown when the app is running on the bundled demo (no server).
+/// Tapping it jumps straight to the Server settings so the fix is one tap away.
 class _OfflineBanner extends StatelessWidget {
-  const _OfflineBanner();
+  final VoidCallback onTap;
+  const _OfflineBanner({required this.onTap});
   @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
+  Widget build(BuildContext context) => Material(
         color: R.gold.withOpacity(.14),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        child: Row(
-          children: const [
-            Icon(Icons.cloud_off, size: 15, color: R.gold),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text('Offline demo — bundled sample plan. Connect your server in Profile → Server.',
-                  style: TextStyle(color: R.gold, fontSize: 11.5)),
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Row(
+              children: const [
+                Icon(Icons.cloud_off, size: 15, color: R.gold),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('Offline demo — bundled sample plan. Tap to connect your server.',
+                      style: TextStyle(color: R.gold, fontSize: 11.5)),
+                ),
+                Icon(Icons.chevron_right, size: 16, color: R.gold),
+              ],
             ),
-          ],
+          ),
         ),
       );
 }
@@ -260,19 +301,17 @@ class _ErrorScreenState extends State<_ErrorScreen> {
                     controller: ctrl,
                     decoration: const InputDecoration(labelText: 'Server URL', hintText: 'http://192.168.1.5:8000'),
                   ),
-                  const SizedBox(height: 12),
-                  Row(children: [
-                    Expanded(
-                      child: OutlinedButton(onPressed: widget.onRetry, child: const Text('Retry')),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => widget.onSaveServer(ctrl.text),
+                      icon: const Icon(Icons.sync, size: 18),
+                      label: const Text('Save & reconnect'),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: () => widget.onSaveServer(ctrl.text),
-                        child: const Text('Save & reconnect'),
-                      ),
-                    ),
-                  ]),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(onPressed: widget.onRetry, child: const Text('Retry current server')),
                 ],
               ),
             ),
@@ -336,7 +375,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final prov = (widget.plan['provenance'] as Map?) ?? {};
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: kScreenPad,
       children: [
         const Text('HOUSEHOLD', style: TextStyle(color: R.muted, fontSize: 11, letterSpacing: 1.2)),
         const SizedBox(height: 8),
@@ -430,25 +469,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   'use your PC\'s LAN IP (e.g. http://192.168.1.5:8000). Leave blank to reset.',
                   style: TextStyle(color: R.muted, fontSize: 11),
                 ),
-                const SizedBox(height: 10),
-                Row(children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        urlCtrl.text = '';
-                        widget.onSaveServer('');
-                      },
-                      child: const Text('Reset'),
-                    ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => widget.onSaveServer(urlCtrl.text),
+                    icon: const Icon(Icons.sync, size: 18),
+                    label: const Text('Save & reconnect'),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () => widget.onSaveServer(urlCtrl.text),
-                      child: const Text('Save & reconnect'),
-                    ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {
+                      urlCtrl.text = '';
+                      widget.onSaveServer('');
+                    },
+                    child: const Text('Reset to default'),
                   ),
-                ]),
+                ),
               ],
             ),
           ),

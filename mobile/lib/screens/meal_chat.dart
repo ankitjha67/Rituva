@@ -65,7 +65,8 @@ class _MealChatSheetState extends State<MealChatSheet> {
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
               child: Row(children: [
-                Text('✦ ', style: TextStyle(color: R.gold, fontSize: 18)),
+                Icon(Icons.forum_outlined, color: R.gold, size: 20),
+                SizedBox(width: 8),
                 Text("Ask about today's meals",
                     style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
               ]),
@@ -96,20 +97,24 @@ class _MealChatSheetState extends State<MealChatSheet> {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(children: [
-                Expanded(
-                  child: TextField(
-                    controller: ctrl,
-                    textInputAction: TextInputAction.send,
-                    decoration: const InputDecoration(hintText: 'Ask anything…'),
-                    onSubmitted: _send,
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+                child: Row(children: [
+                  Expanded(
+                    child: TextField(
+                      controller: ctrl,
+                      textInputAction: TextInputAction.send,
+                      decoration: const InputDecoration(hintText: 'Ask anything…'),
+                      onSubmitted: _send,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(onPressed: sending ? null : () => _send(ctrl.text), child: const Text('Send')),
-              ]),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                      onPressed: sending ? null : () => _send(ctrl.text), child: const Text('Send')),
+                ]),
+              ),
             ),
           ],
         ),
