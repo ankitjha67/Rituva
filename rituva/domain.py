@@ -136,6 +136,9 @@ class NutrientTargets:
     fibre_g: float
     sodium_mg_max: float
     added_sugar_g_max: float
+    iron_mg: float = 0.0                       # ICMR-NIN 2020 RDA (sex-aware) — see targets.py
+    calcium_mg: float = 1000.0
+    b12_ug: float = 2.2
     source: str = "computed"                  # computed | user_provided | doctor_prescription
     citations: tuple = ()
 

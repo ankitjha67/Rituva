@@ -139,8 +139,9 @@ def targets_to_dict(t: NutrientTargets) -> dict:
     return {
         "kcal": t.kcal, "protein_g": t.protein_g, "fat_g": t.fat_g, "carb_g": t.carb_g,
         "fibre_g": t.fibre_g, "sodium_mg_max": t.sodium_mg_max,
-        "added_sugar_g_max": t.added_sugar_g_max, "source": t.source,
-        "citations": list(t.citations),
+        "added_sugar_g_max": t.added_sugar_g_max,
+        "iron_mg": t.iron_mg, "calcium_mg": t.calcium_mg, "b12_ug": t.b12_ug,
+        "source": t.source, "citations": list(t.citations),
     }
 
 

@@ -163,6 +163,9 @@ def _format(r: Recipe) -> str:
 
 
 def _score(r: Recipe, member: Member, ledger: Ledger, di: int) -> float:
+    """Quality score for ranking candidates — deliberately variant-independent so the
+    'top-K best' set is stable. Regenerate variety comes from _variant_choice picking a
+    *different member of that top set*, not from perturbing the ranking."""
     s = 0.0
     if r.region in member.region_prefs:
         s += 3.0
@@ -173,22 +176,40 @@ def _score(r: Recipe, member: Member, ledger: Ledger, di: int) -> float:
     # Stable tie-break for variety. NB: Python's built-in hash() of a str is salted by
     # PYTHONHASHSEED, so it varies per process — using it here made plans (and tests, and
     # the offline demo) non-reproducible. crc32 is stable across processes.
-    tie = zlib.crc32(r.id.encode() if ledger.variant == 0 else f"{r.id}:{ledger.variant}".encode())
+    tie = zlib.crc32(r.id.encode())
     s += ((tie + di * 7) % 5) * 0.06
     return s
+
+
+def _variant_choice(ranked: List[Recipe], ledger: Ledger, di: int, label: str) -> Recipe:
+    """Choose among the already-ranked (best-first) candidates.
+
+    variant 0 → the single best pick (canonical & reproducible — tests and the offline
+    demo depend on it). Regenerate (variant>0) rotates through the top-K best dishes by
+    a per-(role,day) offset that the variant shifts by one each time — so every press of
+    Regenerate yields a *visibly* different menu (even for a dish with a big structural
+    lead like a high-protein staple), while every candidate is still one of the top few
+    by quality, and the validator still guarantees the day stays on-target.
+    """
+    if not ledger.variant or len(ranked) <= 1:
+        return ranked[0]
+    k = min(len(ranked), 8)
+    base = zlib.crc32(f"{label}:{di}".encode())
+    return ranked[(base + ledger.variant) % k]
 
 
 def _pick(pool: List[Recipe], member: Member, ledger: Ledger, di: int,
           warnings: List[str], label: str) -> Optional[Recipe]:
     cands = sorted(pool, key=lambda r: _score(r, member, ledger, di), reverse=True)
-    for r in cands:
-        if ledger.allowed(r, di):
-            return r
+    allowed = [r for r in cands if ledger.allowed(r, di)]
+    if allowed:
+        return _variant_choice(allowed, ledger, di, label)
     # relaxed pass: keep diet/excludes, drop min-gap (record a visible warning, not a silent repeat)
-    for r in cands:
-        if ledger.freq_allowed(r, di):
-            warnings.append(f"{label}: library thin — reused '{r.name}' inside the gap window")
-            return r
+    relaxed = [r for r in cands if ledger.freq_allowed(r, di)]
+    if relaxed:
+        r = _variant_choice(relaxed, ledger, di, label)
+        warnings.append(f"{label}: library thin — reused '{r.name}' inside the gap window")
+        return r
     return cands[0] if cands else None
 
 
@@ -287,12 +308,12 @@ class DeterministicPlanner:
     def _pick_snacks(self, member, ledger, di, season, warnings, n=2):
         pool = base_pool(Role.SNACK, member, season)
         chosen = []
-        for _ in range(n):
+        for i in range(n):
             cands = sorted([r for r in pool if r.id not in {c.id for c in chosen}],
                            key=lambda r: _score(r, member, ledger, di), reverse=True)
-            pick = next((r for r in cands if ledger.allowed(r, di)), cands[0] if cands else None)
-            if pick:
-                chosen.append(pick)
+            ranked = [r for r in cands if ledger.allowed(r, di)] or cands
+            if ranked:
+                chosen.append(_variant_choice(ranked, ledger, di, f"snack{i}"))
         return chosen
 
     # ---- iso-nutrient alternatives (PRD §11.6) ----

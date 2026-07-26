@@ -155,7 +155,7 @@ class _HomeShellState extends State<HomeShell> {
           regenerating: busy),
       PlanScreen(plan: plan!, ctx: ctx!, api: a, onRegenerate: _regenerate, regenerating: busy),
       DiscoverScreen(api: a, plan: plan!),
-      InsightsScreen(plan: plan!, targets: targets!),
+      InsightsScreen(plan: plan!, targets: targets!, anthro: anthro!, ctx: ctx!),
       HealthScreen(member: member!, targets: targets!, anthro: anthro!, api: a, memberId: memberId, onChanged: _load),
       ProfileScreen(
         api: a,
@@ -220,7 +220,7 @@ class _HomeShellState extends State<HomeShell> {
           NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Today'),
           NavigationDestination(icon: Icon(Icons.calendar_month_outlined), label: 'Plan'),
           NavigationDestination(icon: Icon(Icons.explore_outlined), selectedIcon: Icon(Icons.explore), label: 'Discover'),
-          NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Insights'),
+          NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Analytics'),
           NavigationDestination(icon: Icon(Icons.favorite_border), label: 'Health'),
           NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
         ],

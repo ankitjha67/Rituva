@@ -23,7 +23,11 @@ PROTEIN_G_PER_KG = {                 # goal -> g/kg (DGI p.58 RDA 0.83; muscle â
     Goal.MAINTAIN: 1.0, Goal.LOSE: 1.2, Goal.GAIN: 1.4, Goal.MUSCLE: 1.5,
 }
 GOAL_KCAL_ADJ = {Goal.MAINTAIN: 0, Goal.LOSE: -500, Goal.GAIN: 350, Goal.MUSCLE: 300}
-CITATIONS = ("DGI 2024 p.54/58", "WHO FS-394")
+# Micronutrient RDAs â€” ICMR-NIN 2020 (adults). Iron is sex-specific (menstrual losses).
+IRON_MG_RDA = {Sex.M: 19.0, Sex.F: 29.0}
+CALCIUM_MG_RDA = 1000.0
+B12_UG_RDA = 2.2
+CITATIONS = ("DGI 2024 p.54/58", "WHO FS-394", "ICMR-NIN RDA 2020")
 
 
 def bmi(weight_kg: float, height_cm: float) -> float:
@@ -65,6 +69,8 @@ def compute_targets(member: Member) -> NutrientTargets:
         kcal=round(kcal), protein_g=round(protein_g), fat_g=round(fat_g),
         carb_g=round(carb_g), fibre_g=round(fibre_g),
         sodium_mg_max=SODIUM_MAX, added_sugar_g_max=ADDED_SUGAR_MAX,
+        iron_mg=IRON_MG_RDA.get(member.sex, 19.0),
+        calcium_mg=CALCIUM_MG_RDA, b12_ug=B12_UG_RDA,
         source="computed", citations=CITATIONS,
     )
 
@@ -87,6 +93,9 @@ def effective_targets(member: Member) -> NutrientTargets:
             fibre_g=src.get("fibre_g", t.fibre_g),
             sodium_mg_max=src.get("sodium_mg_max", t.sodium_mg_max),
             added_sugar_g_max=src.get("added_sugar_g_max", t.added_sugar_g_max),
+            iron_mg=src.get("iron_mg", t.iron_mg),
+            calcium_mg=src.get("calcium_mg", t.calcium_mg),
+            b12_ug=src.get("b12_ug", t.b12_ug),
             source=source_name,
             citations=(src.get("source", source_name),),
         )
