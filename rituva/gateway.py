@@ -172,7 +172,8 @@ class FallbackRouter:
         if prefer_fast:
             candidates = sorted(candidates, key=lambda m: 0 if _is_fast(m) else 1)
         for model in candidates:
-            res = self.provider.generate(prompt, model=model, schema=schema, temperature=temperature)
+            res = self.provider.generate(prompt, model=model, schema=schema,
+                                         temperature=temperature, timeout=8.0)
             if res.ok and res.text is not None:
                 return res
             self._demoted.add(model)  # cool-down: stop hammering a failing model
@@ -181,5 +182,8 @@ class FallbackRouter:
 
 def build_gateway(provider_name: str = "none", api_key: str = "") -> FallbackRouter:
     prov = make_provider(provider_name, api_key)
-    cfg = auto_configure(prov)
-    return FallbackRouter(provider=prov, order=cfg["order"])
+    # Use the curated fast defaults directly. A live /models discovery call on the hot
+    # path added ~10-20s per plan (and could route to a slow 30-70B model); the curated
+    # order (fast models first via prefer_fast) keeps generation to a couple of seconds.
+    order = list(getattr(prov, "defaults", []) or [])
+    return FallbackRouter(provider=prov, order=order or auto_configure(prov)["order"])

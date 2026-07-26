@@ -34,7 +34,7 @@ class RituvaApi {
     return Platform.isAndroid ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
   }
 
-  static const _timeout = Duration(seconds: 4);
+  static const _timeout = Duration(seconds: 15);   // headroom for the LLM-bearing /plans call
 
   String baseUrl;
   bool offline = false; // true once any call has fallen back to the demo bundle
@@ -113,7 +113,7 @@ class RituvaApi {
   /// This keeps startup snappy when a configured server is unreachable.
   Future<bool> reachable() async {
     try {
-      final r = await http.get(_u('/health')).timeout(const Duration(seconds: 2));
+      final r = await http.get(_u('/health')).timeout(const Duration(seconds: 3));
       offline = r.statusCode >= 400;
       return !offline;
     } catch (_) {
