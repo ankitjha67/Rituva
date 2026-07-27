@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../api.dart';
 import '../theme.dart';
+import 'recipe_sheet.dart';
 
 class PlanScreen extends StatelessWidget {
   final Map<String, dynamic> plan, ctx;
@@ -126,14 +127,14 @@ class PlanScreen extends StatelessWidget {
               style: const TextStyle(color: R.muted, fontSize: 12),
             ),
             const SizedBox(height: 12),
-            ...entries.map((e) => _mealRow(e as Map)),
+            ...entries.map((e) => _mealRow(context, e as Map)),
           ],
         ),
       ),
     );
   }
 
-  Widget _mealRow(Map e) {
+  Widget _mealRow(BuildContext context, Map e) {
     final comps = e['components'] as List;
     final names = comps.map((c) => c['name']).join(' + ');
     final slot = e['slot'] as String;
@@ -141,7 +142,10 @@ class PlanScreen extends StatelessWidget {
     final region = main['region'] as String?;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Container(
+      child: InkWell(
+        onTap: () => RecipeSheet.showForMeal(context, api, comps),
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
         padding: const EdgeInsets.all(11),
         decoration: BoxDecoration(
           color: R.surface,
@@ -173,6 +177,7 @@ class PlanScreen extends StatelessWidget {
                   style: TextStyle(color: regionColor(region), fontWeight: FontWeight.w800, fontSize: 10)),
             ),
         ]),
+        ),
       ),
     );
   }

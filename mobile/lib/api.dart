@@ -253,6 +253,22 @@ class RituvaApi {
     }
   }
 
+  /// Full recipe card: DB ingredient breakdown, nutrients, cooking method, chef videos.
+  /// Server-only — the bundled demo carries plans, not the whole dish library.
+  Future<Map<String, dynamic>> recipe(String recipeId, {bool llm = false}) async {
+    try {
+      final v = await _get('/recipes/$recipeId', {if (llm) 'llm': 1}) as Map<String, dynamic>;
+      offline = false;
+      return v;
+    } catch (e) {
+      if (_isNet(e)) {
+        offline = true;
+        throw OfflineException('Recipes & cooking steps');
+      }
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> memory(String id) async {
     try {
       final v = await _get('/members/$id/memory') as Map<String, dynamic>;

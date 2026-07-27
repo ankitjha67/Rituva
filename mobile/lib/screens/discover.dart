@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../api.dart';
 import '../theme.dart';
+import 'recipe_sheet.dart';
 
 /// Browse the dish library by region (N/S/E/W). Online → the full library from
 /// `/recipes`; offline → the dishes in the current week's plan, with a note.
@@ -122,6 +123,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 color: R.surface,
                 child: ListTile(
                   dense: true,
+                  onTap: offline
+                      ? null
+                      : () => RecipeSheet.show(context, widget.api, '${r['id']}', '${r['name']}'),
                   title: Text('${r['name']}',
                       style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   subtitle: Text('${r['kcal']} kcal${role.isNotEmpty ? ' · ${humanize(role)}' : ''}',

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../api.dart';
 import '../theme.dart';
+import 'recipe_sheet.dart';
 
 class TodayScreen extends StatelessWidget {
   final Map<String, dynamic> ctx, targets, day, plan;
@@ -40,7 +41,7 @@ class TodayScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             const Expanded(
-              child: Text("Today's menu · tap a dish to swap",
+              child: Text("Today's menu · tap for the recipe",
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
             ),
             TextButton.icon(
@@ -280,7 +281,7 @@ class TodayScreen extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: InkWell(
-        onTap: () => _swap(context, main['recipe_id'] as String),
+        onTap: () => RecipeSheet.showForMeal(context, api, comps),
         borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.all(11),
@@ -306,6 +307,12 @@ class TodayScreen extends StatelessWidget {
               ]),
             ),
             if (region != null) _tag(region),
+            IconButton(
+              tooltip: 'Swap this dish',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.swap_horiz, size: 19, color: R.muted),
+              onPressed: () => _swap(context, main['recipe_id'] as String),
+            ),
           ]),
         ),
       ),
