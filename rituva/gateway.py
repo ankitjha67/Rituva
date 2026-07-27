@@ -165,7 +165,15 @@ class FallbackRouter:
     _demoted: set = field(default_factory=set)
 
     def generate(self, prompt: str, *, prefer_fast: bool = False, schema=None,
-                 temperature=0.4) -> GenResult:
+                 temperature=0.4, timeout: float = 8.0) -> GenResult:
+        """Try each model in order until one answers.
+
+        `timeout` is per model attempt. The default suits the short text on the hot path
+        (a plan's one-line explanation), where the user is waiting on a screen. Longer
+        jobs must raise it — a full recipe takes 15-30 s, and leaving it at 8 s silently
+        timed out every model and fell through to the no-LLM path, which reads exactly
+        like "the LLM produced nothing" rather than "we never waited long enough".
+        """
         if isinstance(self.provider, NoLLM) or not self.order:
             return NoLLM().generate(prompt)
         candidates = [m for m in self.order if m not in self._demoted] or self.order
@@ -173,7 +181,7 @@ class FallbackRouter:
             candidates = sorted(candidates, key=lambda m: 0 if _is_fast(m) else 1)
         for model in candidates:
             res = self.provider.generate(prompt, model=model, schema=schema,
-                                         temperature=temperature, timeout=8.0)
+                                         temperature=temperature, timeout=timeout)
             if res.ok and res.text is not None:
                 return res
             self._demoted.add(model)  # cool-down: stop hammering a failing model

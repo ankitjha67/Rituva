@@ -580,6 +580,12 @@ def _save_llm_cache() -> None:
         pass                                     # a cache we can't write is not fatal
 
 
+# Why generated recipes get turned away, so the gates can be tuned from evidence rather
+# than from a hunch. Surfaced at GET /admin/llm-stats.
+from collections import Counter                                            # noqa: E402
+REJECTIONS: "Counter[str]" = Counter()
+REJECT_SAMPLES: List[tuple] = []
+
 _RECIPE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -618,9 +624,23 @@ def unsanctioned_numbers(text: str, db_grams: set) -> List[str]:
     t = re.sub(r"\b\d+(?:\.\d+)?\s*(?:[-–—]|\bto\b)?\s*\d*(?:\.\d+)?\s*"
                r"(?:min|mins|minute|minutes|sec|secs|second|seconds|hour|hours|hr|hrs)\b",
                " ", t, flags=re.I)
-    # 3. temperatures
-    t = re.sub(r"\b\d+\s*(?:°\s*[CF]\b|degrees?\b)", " ", t, flags=re.I)
-    # whatever numeric survives is an unsanctioned quantity
+    # 3. temperatures — including the bare "180C" form (no degree sign)
+    t = re.sub(r"\b\d+\s*(?:°\s*[CF]\b|degrees?\b|[CF]\b)", " ", t, flags=re.I)
+    # 4. dimensions — "roll to 8 inches", "a 20 cm tawa". Size implies no nutrition.
+    t = re.sub(r"\b\d+(?:\.\d+)?\s*(?:[-–—]\s*\d+)?\s*"
+               r"(?:inch|inches|in\b|cm|mm|centimet(?:er|re)s?)\b", " ", t, flags=re.I)
+    # 5. counts of portions/pieces — "divide into 2 equal balls", "makes 4 rotis". These
+    #    split the same food up, they don't add any.
+    t = re.sub(r"\b\d+\s*(?:equal\s*)?"
+               r"(?:portion|portions|ball|balls|piece|pieces|part|parts|serving|servings|"
+               r"roti|rotis|paratha|parathas|dosa|dosas|idli|idlis|chilla|chillas|batch|batches)\b",
+               " ", t, flags=re.I)
+    # 6. water, at any measure — it carries no energy, so a quantity here cannot put the
+    #    plate out of step with the nutrition panel.
+    t = re.sub(r"\b\d+(?:\.\d+)?\s*(?:[-–—/]\s*\d+)?\s*"
+               r"(?:cup|cups|ml|l|litre|litres|liter|liters|tbsp|tsp|tablespoons?|teaspoons?)?\s*"
+               r"(?:of\s+)?water\b", " ", t, flags=re.I)
+    # whatever numeric survives is an unsanctioned ingredient quantity
     return re.findall(r"\b\d+(?:\.\d+)?\s*[A-Za-z/°-]*[A-Za-z]+", t)
 
 
@@ -634,9 +654,21 @@ _RICH_ADDITIONS = (
 
 
 def rich_additions(text: str, own_ingredients: str) -> List[str]:
-    """Calorie-dense extras the text suggests that this dish doesn't actually contain."""
-    low, own = text.lower(), own_ingredients.lower()
-    return [w for w in _RICH_ADDITIONS if w in low and w not in own]
+    """Calorie-dense extras the text suggests that this dish doesn't actually contain.
+
+    Matched on whole words only. A plain substring test fails badly on exactly the words
+    good Indian food writing uses: "creamy curd" is a texture, not cream; "buttermilk" is
+    not butter; "sugary" is not sugar. Those false hits were throwing away sound recipes.
+    """
+    import re
+    own = own_ingredients.lower()
+    hits = []
+    for w in _RICH_ADDITIONS:
+        if w in own:
+            continue                                  # the dish genuinely contains it
+        if re.search(rf"\b{re.escape(w)}s?\b", text, flags=re.I):
+            hits.append(w)
+    return hits
 
 
 def llm_recipe(recipe: Recipe, provider: str, api_key: str, force: bool = False) -> Optional[dict]:
@@ -696,24 +728,43 @@ def llm_recipe(recipe: Recipe, provider: str, api_key: str, force: bool = False)
     gw = build_gateway(provider, api_key)
     for attempt in range(2):                     # one retry — models often comply on the 2nd
         try:
-            res = gw.generate(prompt, schema=_RECIPE_SCHEMA, temperature=0.4 + 0.2 * attempt)
+            # prefer_fast + 35 s: the small instruct models write a recipe in 15-25 s. Left
+            # to its own order the router opened with a 70B model and burned the whole
+            # timeout, making a single dish take 80-100 s.
+            res = gw.generate(prompt, schema=_RECIPE_SCHEMA, temperature=0.4 + 0.2 * attempt,
+                              prefer_fast=True, timeout=35.0)
             if not res.ok or not res.text:
+                REJECTIONS["llm_call_failed"] += 1
                 continue
             data = json.loads(res.text)
             steps = [str(s).strip() for s in data.get("steps", []) if str(s).strip()]
             tips = [str(t).strip() for t in data.get("tips", []) if str(t).strip()]
             intro = str(data.get("intro", "")).strip()
             if not (3 <= len(steps) <= 12) or not intro:
+                REJECTIONS["shape"] += 1
                 continue
+            # Gate 3a: a stray "finish with a swirl of cream" in the TIPS is the model
+            # editorialising, not part of the dish — drop that tip and keep the recipe
+            # rather than throwing away an otherwise good one.
+            tips = [t for t in tips if not rich_additions(t, allowed_txt)]
+
             blob = " ".join([intro] + steps + tips)
             # Gate 1: every gram figure must be one the DB supplied.
             if not _grams_in(blob).issubset(db_grams):
+                REJECTIONS["gate1_grams"] += 1
                 continue
             # Gate 2: no other measured quantity may appear at all (see docstring).
-            if unsanctioned_numbers(blob, db_grams):
+            bad = unsanctioned_numbers(blob, db_grams)
+            if bad:
+                REJECTIONS["gate2_numbers"] += 1
+                REJECT_SAMPLES.append((recipe.name, "numbers", bad[:4]))
                 continue
-            # Gate 3: no calorie-dense extra this dish doesn't actually contain.
-            if rich_additions(blob, allowed_txt):
+            # Gate 3b: but if it's cooked into the method itself, the recipe really does
+            # describe a richer dish than we're counting — reject it.
+            rich = rich_additions(" ".join([intro] + steps), allowed_txt)
+            if rich:
+                REJECTIONS["gate3_rich"] += 1
+                REJECT_SAMPLES.append((recipe.name, "rich", rich))
                 continue
             out = {"intro": intro, "steps": steps, "tips": tips,
                    "source": f"{res.provider}/{res.model}"}

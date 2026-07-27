@@ -361,7 +361,9 @@ def ask(member_id: str, body: AskIn):
               f"{meals_ctx}\n\nUser question: {body.question}\n\n"
               "Answer in 2-4 sentences. You may share culinary or nutrition trivia about these dishes. "
               "Use ONLY the nutrient numbers given above; never invent specific nutrient values.")
-    res = gw.generate(prompt, prefer_fast=True)
+    # 12 s: a 2-4 sentence answer needs more than the 8 s default, but must still land
+    # inside the mobile client's 15 s per-call timeout so the app doesn't give up first.
+    res = gw.generate(prompt, prefer_fast=True, timeout=12.0)
     return {"answer": (res.text.strip() if res.ok and res.text.strip()
                        else "Sorry, the assistant is unavailable right now."),
             "llm": res.provider, "model": res.model}
