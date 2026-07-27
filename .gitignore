@@ -43,3 +43,6 @@ mobile/pubspec.lock
 Thumbs.db
 .idea/
 .vscode/
+
+# Generated LLM recipe cache (per-deployment, regenerates on demand)
+rituva/llm_recipes.json

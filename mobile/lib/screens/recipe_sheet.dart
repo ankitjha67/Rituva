@@ -155,8 +155,38 @@ class _RecipeSheetState extends State<RecipeSheet> {
             const Text('HOW TO MAKE IT',
                 style: TextStyle(color: R.muted, fontSize: 11, letterSpacing: 1.2)),
             const SizedBox(height: 10),
+            if ('${m['intro'] ?? ''}'.trim().isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: R.gold.withOpacity(.09),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: R.gold.withOpacity(.28)),
+                ),
+                child: Text('${m['intro']}',
+                    style: const TextStyle(fontSize: 13, height: 1.4, fontStyle: FontStyle.italic)),
+              ),
+              const SizedBox(height: 14),
+            ],
             ...steps.asMap().entries.map((e) => _step(e.key + 1, '${e.value}')),
+            if (((m['tips'] as List?) ?? const []).isNotEmpty) ...[
+              const SizedBox(height: 6),
+              const Text("COOK'S TIPS",
+                  style: TextStyle(color: R.muted, fontSize: 11, letterSpacing: 1.2)),
+              const SizedBox(height: 8),
+              ...((m['tips'] as List).map((t) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text('• ', style: TextStyle(color: R.teal, fontSize: 13)),
+                      Expanded(
+                          child: Text('$t',
+                              style: const TextStyle(fontSize: 12.5, height: 1.4, color: R.muted))),
+                    ]),
+                  ))),
+            ],
             const SizedBox(height: 10),
+            _sourceLine('${m['source'] ?? ''}'),
+            const SizedBox(height: 6),
             _note('${m['grounding'] ?? ''}'),
             const SizedBox(height: 20),
 
@@ -308,6 +338,23 @@ class _RecipeSheetState extends State<RecipeSheet> {
         decoration: BoxDecoration(color: c.withOpacity(.18), borderRadius: BorderRadius.circular(8)),
         child: Text(s, style: TextStyle(color: c, fontWeight: FontWeight.w700, fontSize: 10.5)),
       );
+
+  /// Who wrote the steps — an LLM-authored recipe says so plainly, and says what the
+  /// model was and wasn't allowed to decide.
+  Widget _sourceLine(String source) {
+    if (source.isEmpty || source == 'deterministic') {
+      return const Text('Steps built from this dish\'s Knowledge-DB ingredients.',
+          style: TextStyle(color: R.muted, fontSize: 11));
+    }
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Icon(Icons.auto_awesome, size: 12, color: R.gold),
+      const SizedBox(width: 6),
+      Expanded(
+        child: Text('Method written by $source — quantities still come from the DB.',
+            style: const TextStyle(color: R.gold, fontSize: 11)),
+      ),
+    ]);
+  }
 
   Widget _note(String s) => s.trim().isEmpty
       ? const SizedBox.shrink()

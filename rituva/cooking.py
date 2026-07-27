@@ -556,6 +556,175 @@ def method(recipe: Recipe) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# LLM-authored recipes  (prose from the model, every number still from the DB)
+# ---------------------------------------------------------------------------
+# Cache of accepted LLM recipes, keyed by recipe id. Generation costs a few seconds, so
+# the first person to open a dish pays it and everyone after gets it instantly. Deleting
+# this file simply regenerates on demand.
+_LLM_CACHE_PATH = os.path.join(os.path.dirname(__file__), "llm_recipes.json")
+_LLM_CACHE: Dict[str, dict] = {}
+if os.path.exists(_LLM_CACHE_PATH):
+    try:
+        with open(_LLM_CACHE_PATH, "r", encoding="utf-8") as fh:
+            _LLM_CACHE = json.load(fh)
+    except Exception:
+        _LLM_CACHE = {}
+
+
+def _save_llm_cache() -> None:
+    try:
+        with open(_LLM_CACHE_PATH, "w", encoding="utf-8") as fh:
+            json.dump(_LLM_CACHE, fh, indent=1, ensure_ascii=False, sort_keys=True)
+    except Exception:
+        pass                                     # a cache we can't write is not fatal
+
+
+_RECIPE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "intro": {"type": "string"},
+        "steps": {"type": "array", "items": {"type": "string"}},
+        "tips": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["intro", "steps", "tips"],
+}
+
+
+def _grams_in(text: str) -> set:
+    """Every gram quantity mentioned in some text."""
+    import re
+    return {float(m) for m in re.findall(r"(\d+(?:\.\d+)?)\s*(?:g|gram|grams)\b", text)}
+
+
+def unsanctioned_numbers(text: str, db_grams: set) -> List[str]:
+    """Numbers in a generated recipe that would imply nutrition we haven't counted.
+
+    Only three kinds of number are legitimate in a Rituva method:
+      * a gram amount the Knowledge DB supplied for this very dish,
+      * a cooking time ("simmer 5-7 minutes"),
+      * an oven/oil temperature ("180°C").
+    Anything else — "1 small onion", "2 tomatoes", "1-2 teaspoons of garam masala" — is a
+    measured ingredient we are not counting, which would quietly desync the recipe from
+    the nutrition panel. We strip the three legal forms and flag whatever digits survive.
+    """
+    import re
+    t = text
+    # 1. sanctioned gram amounts (only the exact values the DB gave us)
+    for g in sorted(db_grams, reverse=True):
+        for form in (f"{g:g}", f"{round(g)}"):
+            t = re.sub(rf"\b{re.escape(form)}\s*(?:g|gram|grams)\b", " ", t)
+    # 2. durations, incl. ranges like "5-7 minutes" and "1 to 2 hours"
+    t = re.sub(r"\b\d+(?:\.\d+)?\s*(?:[-–—]|\bto\b)?\s*\d*(?:\.\d+)?\s*"
+               r"(?:min|mins|minute|minutes|sec|secs|second|seconds|hour|hours|hr|hrs)\b",
+               " ", t, flags=re.I)
+    # 3. temperatures
+    t = re.sub(r"\b\d+\s*(?:°\s*[CF]\b|degrees?\b)", " ", t, flags=re.I)
+    # whatever numeric survives is an unsanctioned quantity
+    return re.findall(r"\b\d+(?:\.\d+)?\s*[A-Za-z/°-]*[A-Za-z]+", t)
+
+
+# Calorie-dense things a model likes to suggest ("finish with a swirl of cream"). Even
+# without a number, following that advice would put the plate well past the calories we
+# display — so a generated recipe may only mention these if the DB actually lists them.
+_RICH_ADDITIONS = (
+    "cream", "butter", "ghee", "cheese", "mayonnaise", "condensed milk", "coconut milk",
+    "khoya", "mawa", "sugar", "honey", "jaggery", "syrup", "nutella", "chocolate",
+)
+
+
+def rich_additions(text: str, own_ingredients: str) -> List[str]:
+    """Calorie-dense extras the text suggests that this dish doesn't actually contain."""
+    low, own = text.lower(), own_ingredients.lower()
+    return [w for w in _RICH_ADDITIONS if w in low and w not in own]
+
+
+def llm_recipe(recipe: Recipe, provider: str, api_key: str, force: bool = False) -> Optional[dict]:
+    """Have the LLM write a proper recipe for a dish — technique, spicing, doneness cues.
+
+    The model is given the dish's exact Knowledge-DB ingredient list and is allowed to
+    write freely about *method*, but the arithmetic stays ours: the result is rejected
+    unless every gram quantity it mentions is one of the DB's own quantities. That single
+    check is what keeps the nutrition panel and the cooking steps describing the same
+    plate of food — the model can say "fold the paneer in late", it cannot say "add 100 g
+    cream" and silently make the dish 350 kcal heavier.
+
+    Returns None (caller falls back to the deterministic template) when there's no LLM
+    configured, the call fails, or the output doesn't pass the check.
+    """
+    if not provider or provider == "none":
+        return None
+    # Plain staples (roti, rice) are deliberately bare — they're the neutral base the rest
+    # of the plate is built on. Models can't resist "improving" them with onion, garlic and
+    # a tablespoon of oil, which turns plain rice into pulao and misstates the plate. The
+    # deterministic template is both correct and better here, so don't ask.
+    if "staple" in recipe.tags:
+        return None
+    if not force and recipe.id in _LLM_CACHE:
+        return _LLM_CACHE[recipe.id]
+
+    from .gateway import build_gateway
+
+    allowed = [(FOODS[i.food_id].name, i.qty_g) for i in recipe.ingredients if i.food_id in FOODS]
+    allowed_txt = "\n".join(f"- {n}: {round(q)} g" for n, q in allowed)
+    region = f" ({recipe.region.value} Indian)" if recipe.region else ""
+    prompt = (
+        f"You are an experienced Indian home cook. Write a recipe for \"{recipe.name}\"{region} "
+        f"for one serving.\n\n"
+        f"These are the ONLY ingredients with measured amounts, and the amounts are fixed:\n"
+        f"{allowed_txt}\n\n"
+        f"THE NUMBER RULE — this is the important one. The only numbers allowed anywhere in "
+        f"your answer are:\n"
+        f"  (a) the exact gram amounts listed above, written like \"50 g paneer\";\n"
+        f"  (b) cooking times, like \"saute 2 minutes\" or \"simmer 5-7 minutes\";\n"
+        f"  (c) temperatures, like \"180C\".\n"
+        f"Every other ingredient must be described WITHOUT any number or measure. "
+        f"Write \"a small onion, finely chopped\", \"a thumb of ginger\", \"a few cloves of "
+        f"garlic\", \"a slit green chilli\", \"garam masala to taste\", \"a splash of water\". "
+        f"NEVER write \"1 onion\", \"2 tomatoes\", \"1 tsp cumin\", \"1/2 cup water\" — no "
+        f"counts, no spoons, no cups. Those amounts are not in our nutrition database, so a "
+        f"number there would make the recipe disagree with the calories we show.\n\n"
+        f"Also never suggest adding cream, butter, ghee, cheese, coconut milk, sugar, honey "
+        f"or jaggery unless it is in the list above — not even as an optional flourish in a "
+        f"tip. Those would push the dish well past the calories we display.\n\n"
+        f"Otherwise cook like a real cook: how to temper, what the pan should look and smell "
+        f"like at each stage, how to tell when it is done, the common mistake to avoid.\n\n"
+        f"Return JSON: intro (1-2 sentences on what the dish is and why it works), "
+        f"steps (5-9 actions, no step numbers inside the text), tips (2-3 short practical tips)."
+    )
+    db_grams = {float(round(q)) for _, q in allowed} | {float(q) for _, q in allowed}
+    gw = build_gateway(provider, api_key)
+    for attempt in range(2):                     # one retry — models often comply on the 2nd
+        try:
+            res = gw.generate(prompt, schema=_RECIPE_SCHEMA, temperature=0.4 + 0.2 * attempt)
+            if not res.ok or not res.text:
+                continue
+            data = json.loads(res.text)
+            steps = [str(s).strip() for s in data.get("steps", []) if str(s).strip()]
+            tips = [str(t).strip() for t in data.get("tips", []) if str(t).strip()]
+            intro = str(data.get("intro", "")).strip()
+            if not (3 <= len(steps) <= 12) or not intro:
+                continue
+            blob = " ".join([intro] + steps + tips)
+            # Gate 1: every gram figure must be one the DB supplied.
+            if not _grams_in(blob).issubset(db_grams):
+                continue
+            # Gate 2: no other measured quantity may appear at all (see docstring).
+            if unsanctioned_numbers(blob, db_grams):
+                continue
+            # Gate 3: no calorie-dense extra this dish doesn't actually contain.
+            if rich_additions(blob, allowed_txt):
+                continue
+            out = {"intro": intro, "steps": steps, "tips": tips,
+                   "source": f"{res.provider}/{res.model}"}
+            _LLM_CACHE[recipe.id] = out
+            _save_llm_cache()
+            return out
+        except Exception:
+            continue
+    return None
+
+
 def recipe_card(recipe: Recipe, nutrients: Optional[dict] = None,
                 ingredients: Optional[list] = None) -> dict:
     """Everything the UI needs to cook a dish: method, chef videos, and DB provenance."""

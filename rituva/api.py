@@ -290,18 +290,21 @@ def list_recipes(region: Optional[str] = None, role: Optional[str] = None,
 
 
 @app.get("/recipes/{recipe_id}")
-def recipe_detail(recipe_id: str, scale: float = 1.0, llm: int = 0):
+def recipe_detail(recipe_id: str, scale: float = 1.0, llm: int = 1, refresh: int = 0):
     """Full recipe card: DB ingredient breakdown, computed nutrients, cooking method and
     chef videos.
 
-    Anti-hallucination holds end-to-end here: quantities and nutrients come from the
-    Knowledge DB (`nutrition.make_component`), the method is generated from that same
-    ingredient list (`cooking.method`), and video links are YouTube *search* endpoints —
-    no video ID is ever guessed. With `?llm=1` the model may rewrite the prose of the
-    steps for readability; it is explicitly barred from changing any quantity, and any
-    failure falls back to the deterministic text.
+    The division of labour is the point. The LLM writes the *cooking* — technique,
+    spicing, doneness cues, what a good tadka smells like — because that is craft
+    knowledge, not arithmetic. The Knowledge DB owns every number: ingredient weights and
+    all nutrients come from `nutrition.make_component`, and an LLM recipe is thrown away
+    unless every gram figure in it is one the DB supplied (`cooking.llm_recipe`). If
+    there's no LLM configured, the call fails, or the output doesn't pass that check, the
+    deterministic template answers instead — so a dish always has a method.
+
+    `?llm=0` forces the template; `?refresh=1` regenerates instead of using the cache.
     """
-    from .cooking import recipe_card
+    from .cooking import llm_recipe, recipe_card
 
     r = RECIPES.get(recipe_id)
     if r is None:
@@ -315,54 +318,16 @@ def recipe_detail(recipe_id: str, scale: float = 1.0, llm: int = 0):
                        ingredients=ings)
     card["scale"] = scale
     card["method"]["source"] = "deterministic"
+    card["method"]["intro"] = ""
+    card["method"]["tips"] = []
     if llm:
-        polished = _polish_method(r, card["method"]["steps"])
-        if polished:
-            card["method"]["steps"] = polished
-            card["method"]["source"] = f"{_LLM_PROVIDER} (prose only — quantities unchanged)"
+        written = llm_recipe(r, _LLM_PROVIDER, _LLM_KEY, force=bool(refresh))
+        if written:
+            card["method"]["intro"] = written["intro"]
+            card["method"]["steps"] = written["steps"]
+            card["method"]["tips"] = written["tips"]
+            card["method"]["source"] = written["source"]
     return card
-
-
-def _polish_method(recipe, steps: list) -> Optional[list]:
-    """Let the LLM improve the *wording* of generated steps. Numbers are not up for
-    negotiation: if the model drops or adds a step, or emits anything unparseable, we
-    keep the deterministic text."""
-    if not _LLM_PROVIDER or _LLM_PROVIDER == "none":
-        return None
-    from .gateway import build_gateway
-    numbered = "\n".join(f"{i}. {s}" for i, s in enumerate(steps, 1))
-    prompt = (
-        f"Rewrite these cooking steps for '{recipe.name}' so they read like a confident home "
-        f"cook wrote them. Rules: keep EXACTLY {len(steps)} steps, one per line, numbered "
-        f"'1.' to '{len(steps)}.'; never change, add or remove any gram quantity; keep every "
-        f"'to taste' as-is; no preamble, no closing remark.\n\n{numbered}"
-    )
-    try:
-        res = build_gateway(_LLM_PROVIDER, _LLM_KEY).generate(prompt, prefer_fast=True)
-        if not res.ok or not res.text:
-            return None
-        lines = [ln.strip() for ln in res.text.splitlines() if ln.strip()]
-        cleaned = []
-        for ln in lines:
-            part = ln.split(".", 1)
-            if len(part) == 2 and part[0].strip().isdigit():
-                cleaned.append(part[1].strip())
-        # Only accept a clean 1:1 rewrite — anything else means the model went off-script.
-        if len(cleaned) != len(steps):
-            return None
-        # Hard gate: the set of gram quantities must survive the rewrite untouched.
-        # Models happily reflow "5 g" to "5g" (fine) but must never turn it into "50 g".
-        if _grams(cleaned) != _grams(steps):
-            return None
-        return cleaned
-    except Exception:
-        return None
-
-
-def _grams(steps: list) -> list:
-    """Every gram quantity mentioned, sorted — the fingerprint a rewrite must preserve."""
-    import re
-    return sorted(float(m) for m in re.findall(r"(\d+(?:\.\d+)?)\s*g\b", " ".join(steps)))
 
 
 @app.post("/members/{member_id}/ask")
