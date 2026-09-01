@@ -11,10 +11,13 @@ rituva.db
 .env
 *.key
 
-# --- IFCT 2017 local food data (personal-use only per IFCT terms; NOT for public redistribution) ---
-rituva/ifct_local.py
-rituva/recipes_local.py
+# --- IFCT 2017 food data (ICMR-NIN; licensed for PERSONAL USE, not redistribution) ---
+# Tracked only because this repository is PRIVATE. If it is ever made public again, these
+# must be removed from the working tree AND purged from history (git filter-repo), and
+# mobile/assets/kb.json must be regenerated with `scripts/export_kb.py --public`.
+# The source PDF itself is never tracked.
 ifct_*.json
+IFCT*.pdf
 
 # --- Claude Code / local tooling ---
 .claude/

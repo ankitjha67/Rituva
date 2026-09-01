@@ -481,7 +481,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       lib == null
                           ? 'Checking…'
                           : '${lib!['recipes']} dishes · ${lib!['foods']} foods on this phone'
-                              '${lib!['full'] == true ? ' (full library)' : ' (built-in)'}',
+                              '${lib!['full'] == true ? ' (downloaded)' : ' (built in)'}',
                       style: TextStyle(
                           color: lib?['full'] == true ? R.green : R.teal, fontSize: 12),
                     ),
@@ -489,23 +489,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ]),
                 const SizedBox(height: 8),
                 const Text(
-                  'Menus, swaps, recipes, groceries and analytics are all computed on this '
-                  'phone — no server needed. Download your full library once while the '
-                  'server is reachable to get every dish offline too.',
+                  'The whole library ships inside the app — menus, swaps, recipes, groceries '
+                  'and analytics are all computed on this phone, with no server. Re-sync only '
+                  'if you add dishes or pre-write more recipes on the server.',
                   style: TextStyle(color: R.muted, fontSize: 11),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
-                  child: FilledButton.tonalIcon(
+                  child: OutlinedButton.icon(
                     onPressed: syncing ? null : _download,
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: R.teal, side: const BorderSide(color: R.line)),
                     icon: syncing
                         ? const SizedBox(
                             width: 16,
                             height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: R.gold))
-                        : const Icon(Icons.download_for_offline_outlined, size: 18),
-                    label: Text(syncing ? 'Downloading…' : 'Download full library'),
+                            child: CircularProgressIndicator(strokeWidth: 2, color: R.teal))
+                        : const Icon(Icons.sync, size: 18),
+                    label: Text(syncing ? 'Syncing…' : 'Re-sync from server'),
                   ),
                 ),
               ],
