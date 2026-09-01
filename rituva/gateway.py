@@ -14,18 +14,34 @@ Design guarantees:
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 # Curated defaults used when live discovery is unavailable (offline / no key).
+#
+# These go stale: hosted models are retired. On 2026-09-01 all three previous defaults
+# (llama-3.3-70b, qwen2.5-7b, llama-3.1-8b) returned HTTP 410 Gone — llama-3.1-8b had
+# reached end of life on 2026-08-26 — which silently killed recipe generation, because a
+# fixed list has no way to notice. Live discovery (cached, below) is the real defence;
+# this list is only the fallback, verified working on 2026-09-01.
 NVIDIA_BASE = "https://integrate.api.nvidia.com/v1"
 NVIDIA_DEFAULTS = [
-    "meta/llama-3.3-70b-instruct",     # best (quality)
-    "qwen/qwen2.5-7b-instruct",        # fast
-    "meta/llama-3.1-8b-instruct",      # fast fallback
+    "openai/gpt-oss-20b",                      # fastest verified (~16 s for a recipe)
+    "nvidia/nemotron-3.5-lightning-30b-a3b",   # ~38 s
+    "minimaxai/minimax-m3",                    # ~31 s
 ]
+
+# Listed-but-not-deployed models answer /models yet 404 on inference, and plenty of
+# entries aren't chat models at all. Both get filtered out of a discovered order.
+_NON_CHAT = re.compile(
+    r"embed|rerank|vision|guard|safety|ocr|diffusion|coder?\b|retriev|parse|fuyu|dplm|esm|"
+    r"evo2|protein|molmo|audio|speech|tts|asr|riva|clip|video|image|paraphrase|sql|reward|"
+    r"deplot|kosmos|neva|vila|calibration",
+    re.I,
+)
 OPENAI_BASE = "https://api.openai.com/v1"
 OLLAMA_BASE = "http://localhost:11434/v1"
 # Google Gemini exposes an OpenAI-compatible endpoint — no vendor SDK needed.
@@ -162,7 +178,13 @@ class FallbackRouter:
     """Ordered failover across models of one provider, ending in the no-LLM path."""
     provider: LLMProvider
     order: List[str] = field(default_factory=list)
+    # How many leading entries of `order` are curated/measured. Those keep their order —
+    # `prefer_fast` only reshuffles the discovered tail, since its name heuristic
+    # ("8b", "mini", "flash") can't see that e.g. gpt-oss-20b is the fastest one here.
+    pinned: int = 0
     _demoted: set = field(default_factory=set)
+
+    _winner: Optional[str] = None      # the model that last answered — tried first
 
     def generate(self, prompt: str, *, prefer_fast: bool = False, schema=None,
                  temperature=0.4, timeout: float = 8.0) -> GenResult:
@@ -173,25 +195,61 @@ class FallbackRouter:
         jobs must raise it — a full recipe takes 15-30 s, and leaving it at 8 s silently
         timed out every model and fell through to the no-LLM path, which reads exactly
         like "the LLM produced nothing" rather than "we never waited long enough".
+
+        Dead models are demoted as they're found, and the first model that succeeds is
+        remembered so later calls don't re-walk the graveyard.
         """
         if isinstance(self.provider, NoLLM) or not self.order:
             return NoLLM().generate(prompt)
         candidates = [m for m in self.order if m not in self._demoted] or self.order
         if prefer_fast:
-            candidates = sorted(candidates, key=lambda m: 0 if _is_fast(m) else 1)
+            keep = [m for m in self.order[:self.pinned] if m in candidates]
+            tail = [m for m in candidates if m not in keep]
+            candidates = keep + sorted(tail, key=lambda m: 0 if _is_fast(m) else 1)
+        if self._winner and self._winner in candidates:
+            candidates = [self._winner] + [m for m in candidates if m != self._winner]
         for model in candidates:
             res = self.provider.generate(prompt, model=model, schema=schema,
                                          temperature=temperature, timeout=timeout)
             if res.ok and res.text is not None:
+                self._winner = model
                 return res
             self._demoted.add(model)  # cool-down: stop hammering a failing model
         return NoLLM().generate(prompt)  # graceful final fallback
 
 
+# Discovered model orders, cached per provider for the life of the process. Discovery is
+# one HTTP call; doing it per request is what once added 10-20 s to every plan, and never
+# doing it is what let a retired model kill generation silently. Once, then reuse.
+_DISCOVERY_CACHE: Dict[str, List[str]] = {}
+
+
+def discover_order(prov: LLMProvider) -> List[str]:
+    """Live model list for a provider, filtered to plausible chat models and ordered
+    curated-first. Falls back to the curated defaults if discovery fails."""
+    defaults = list(getattr(prov, "defaults", []) or [])
+    key = f"{prov.name}:{getattr(prov, 'base_url', '')}"
+    if key in _DISCOVERY_CACHE:
+        return _DISCOVERY_CACHE[key]
+    try:
+        live = [m.id for m in prov.list_models() if not _NON_CHAT.search(m.id)]
+    except Exception:
+        live = []
+    if not live:
+        return defaults
+    # Curated picks first (they're verified), then everything else fast-first. The router
+    # demotes anything that 404s, so listed-but-undeployed models cost one attempt each.
+    rest = sorted((m for m in live if m not in defaults), key=lambda m: 0 if _is_fast(m) else 1)
+    order = [m for m in defaults if m in live] + rest
+    _DISCOVERY_CACHE[key] = order or defaults
+    return _DISCOVERY_CACHE[key]
+
+
 def build_gateway(provider_name: str = "none", api_key: str = "") -> FallbackRouter:
     prov = make_provider(provider_name, api_key)
-    # Use the curated fast defaults directly. A live /models discovery call on the hot
-    # path added ~10-20s per plan (and could route to a slow 30-70B model); the curated
-    # order (fast models first via prefer_fast) keeps generation to a couple of seconds.
-    order = list(getattr(prov, "defaults", []) or [])
-    return FallbackRouter(provider=prov, order=order or auto_configure(prov)["order"])
+    if isinstance(prov, NoLLM):
+        return FallbackRouter(provider=prov, order=[])
+    order = discover_order(prov)
+    defaults = list(getattr(prov, "defaults", []) or [])
+    pinned = len([m for m in order[:len(defaults)] if m in defaults])
+    return FallbackRouter(provider=prov, order=order, pinned=pinned)

@@ -289,6 +289,30 @@ def list_recipes(region: Optional[str] = None, role: Optional[str] = None,
     return {"count": len(out), "recipes": out}
 
 
+@app.get("/reference/rda")
+def reference_rda(member_id: Optional[str] = None):
+    """ICMR-NIN Recommended Dietary Allowances for every life stage, plus the deficiency
+    disorders each nutrient shortfall causes.
+
+    Transcribed from Annexure 3 of the Dietary Guidelines for Indians — not computed and
+    not model-written. When `member_id` is given, the row matching that person's sex, age
+    and activity level is flagged so the app can show "your reference group".
+    """
+    from .rda import for_member, to_dict
+
+    payload = to_dict()
+    if member_id:
+        conn = _conn()
+        try:
+            m = store.get_member(conn, member_id)
+        finally:
+            conn.close()
+        if m:
+            match = for_member(m.sex.value, m.age, m.pal)
+            payload["matched"] = match.to_dict() if match else None
+    return payload
+
+
 @app.get("/kb/export")
 def kb_export():
     """The whole Knowledge DB as JSON, for the app's on-device engine.

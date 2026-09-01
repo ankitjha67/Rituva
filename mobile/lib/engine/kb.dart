@@ -76,8 +76,15 @@ class KB {
       members: (j['members'] as List?) ?? const [],
       version: '${j['kb_version'] ?? 'kb'}',
       isFull: isFull,
-    )..llmRecipes = (j['llm_recipes'] as Map?)?.cast<String, dynamic>() ?? {};
+    )
+      ..llmRecipes = (j['llm_recipes'] as Map?)?.cast<String, dynamic>() ?? {}
+      ..rda = (j['rda'] as Map?)?.cast<String, dynamic>() ?? {};
   }
+
+  /// ICMR-NIN Recommended Dietary Allowances by life stage, plus the deficiency
+  /// disorders each shortfall causes. Transcribed from the Dietary Guidelines for
+  /// Indians, so the reference screen works offline like everything else.
+  Map<String, dynamic> rda = {};
 
   /// Recipe prose written by a real model on the server and carried along with a
   /// downloaded library. Absent for the bundled KB — in that case the app shows the

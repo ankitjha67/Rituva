@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../api.dart';
 import '../theme.dart';
+import 'reference.dart';
 
 class HealthScreen extends StatefulWidget {
   final Map<String, dynamic> member, targets, anthro;
@@ -54,6 +55,31 @@ class _HealthScreenState extends State<HealthScreen> {
     return ListView(
       padding: kScreenPad,
       children: [
+        // Reference tables: what every age/sex actually needs per day, and what a
+        // shortfall of each nutrient causes.
+        Card(
+          color: R.surface,
+          child: ListTile(
+            leading: const Icon(Icons.menu_book_outlined, color: R.gold),
+            title: const Text('Daily requirements & deficiencies',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+            subtitle: const Text('ICMR-NIN allowances for men, women and children — and '
+                'what each deficiency causes',
+                style: TextStyle(color: R.muted, fontSize: 11)),
+            trailing: const Icon(Icons.chevron_right, color: R.muted),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ReferenceScreen(
+                  api: widget.api,
+                  memberId: widget.memberId,
+                  memberName: '${widget.member['name'] ?? ''}',
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
         Card(
           color: R.surface,
           child: Padding(

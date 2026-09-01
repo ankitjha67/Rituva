@@ -28,12 +28,17 @@ def build_kb(include_llm_recipes: bool = True) -> dict:
         "contains": sorted(r.contains), "tags": sorted(r.tags),
     } for r in RECIPES.values()]
 
+    from .rda import to_dict as rda_dict
+
     kb = {
         "kb_version": KB_VERSION,
         "foods": foods,
         "recipes": recipes,
         "policy": {"frequency": dict(FREQUENCY_POLICY), "pulse_ids": sorted(PULSE_IDS)},
         "members": [store.member_to_dict(m) for m in SEED_MEMBERS.values()],
+        # RDA tables + deficiency disorders travel with the KB so the reference screen
+        # works with no server, like everything else.
+        "rda": rda_dict(),
     }
 
     # Model-written recipe prose travels with the full export only: it is generated on

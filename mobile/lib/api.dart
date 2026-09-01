@@ -243,6 +243,13 @@ class RituvaApi {
         () => local.recipe(recipeId),
       );
 
+  /// ICMR-NIN daily requirements by life stage + deficiency disorders.
+  Future<Map<String, dynamic>> reference({String? memberId}) async => _tryServer(
+        () async => await _get('/reference/rda',
+            {if (memberId != null) 'member_id': memberId}) as Map<String, dynamic>,
+        () => local.reference(memberId: memberId),
+      );
+
   Future<Map<String, dynamic>> memory(String id) async => _tryServer(
       () async => await _get('/members/$id/memory') as Map<String, dynamic>,
       () => local.memory(id));

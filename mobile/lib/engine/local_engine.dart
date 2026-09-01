@@ -39,6 +39,54 @@ class LocalEngine {
     };
   }
 
+  /// RDA tables + deficiency disorders, with the row matching this member flagged.
+  Future<Map<String, dynamic>> reference({String? memberId}) async {
+    final k = await kb();
+    final out = Map<String, dynamic>.from(k.rda);
+    if (memberId != null && out['groups'] is List) {
+      final m = await member(memberId);
+      out['matched'] = _matchGroup(
+          out['groups'] as List, '${m['sex'] ?? 'M'}',
+          (m['age'] as num?)?.toInt() ?? 30, (m['pal'] as num?)?.toDouble() ?? 1.4);
+    }
+    return out;
+  }
+
+  /// Mirrors rda.for_member() — pick the life-stage row that fits this person.
+  Map<String, dynamic>? _matchGroup(List groups, String sex, int age, double pal) {
+    final stage = pal < 1.45 ? 'Sedentary work' : (pal < 1.7 ? 'Moderate work' : 'Heavy work');
+    late String g, s;
+    if (age < 1) {
+      g = 'Infant';
+      s = '6-12 months';
+    } else if (age <= 3) {
+      g = 'Child';
+      s = '1-3 years';
+    } else if (age <= 6) {
+      g = 'Child';
+      s = '4-6 years';
+    } else if (age <= 9) {
+      g = 'Child';
+      s = '7-9 years';
+    } else if (age <= 12) {
+      g = sex == 'M' ? 'Boy' : 'Girl';
+      s = '10-12 years';
+    } else if (age <= 15) {
+      g = sex == 'M' ? 'Boy' : 'Girl';
+      s = '13-15 years';
+    } else if (age <= 17) {
+      g = sex == 'M' ? 'Boy' : 'Girl';
+      s = '16-17 years';
+    } else {
+      g = sex == 'M' ? 'Man' : 'Woman';
+      s = stage;
+    }
+    for (final r in groups) {
+      if (r['group'] == g && r['stage'] == s) return (r as Map).cast<String, dynamic>();
+    }
+    return null;
+  }
+
   // ------------------------------------------------------------- members ----
   Future<List> members() async {
     final p = await SharedPreferences.getInstance();
