@@ -28,8 +28,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   Future<void> _load() async {
     setState(() => loading = true);
     try {
+      // Served by the server when reachable, otherwise by the on-device engine — either
+      // way it's the real dish library, not a slice of this week's plan.
       all = await widget.api.recipes();
-      offline = false;
+      offline = widget.api.offline;
     } catch (_) {
       offline = true;
       all = _fromPlan();
@@ -92,7 +94,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         if (offline)
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: Text("Offline — showing this week's dishes. Connect a server to browse all 1000+.",
+            child: Text('Offline — browsing the library stored on this phone.',
                 style: TextStyle(color: R.gold, fontSize: 11), textAlign: TextAlign.center),
           ),
         Padding(
@@ -123,9 +125,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 color: R.surface,
                 child: ListTile(
                   dense: true,
-                  onTap: offline
-                      ? null
-                      : () => RecipeSheet.show(context, widget.api, '${r['id']}', '${r['name']}'),
+                  onTap: () =>
+                      RecipeSheet.show(context, widget.api, '${r['id']}', '${r['name']}'),
                   title: Text('${r['name']}',
                       style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   subtitle: Text('${r['kcal']} kcal${role.isNotEmpty ? ' · ${humanize(role)}' : ''}',

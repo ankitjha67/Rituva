@@ -289,6 +289,19 @@ def list_recipes(region: Optional[str] = None, role: Optional[str] = None,
     return {"count": len(out), "recipes": out}
 
 
+@app.get("/kb/export")
+def kb_export():
+    """The whole Knowledge DB as JSON, for the app's on-device engine.
+
+    This is how a user's full (IFCT-derived, personal-use) library reaches their own
+    phone: it is served from their own machine to their own device and never enters the
+    repo or an APK. A fresh install already carries the curated public KB bundled in
+    `assets/kb.json`; downloading this replaces it with the fuller one.
+    """
+    from .kb_export import build_kb
+    return build_kb(include_llm_recipes=True)
+
+
 @app.get("/recipes/{recipe_id}")
 def recipe_detail(recipe_id: str, scale: float = 1.0, llm: int = 1, refresh: int = 0):
     """Full recipe card: DB ingredient breakdown, computed nutrients, cooking method and

@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'engine/kb.dart';
+import 'engine/local_engine.dart';
 
-/// Raised when a server-only feature (swap, save preference) is used while the
-/// app is running on the bundled offline demo.
+/// Raised only for the handful of things that genuinely cannot work without a server —
+/// today that is live LLM chat. Everything else (planning, swaps, recipes, groceries,
+/// analytics, profiles, logging) runs on-device via [LocalEngine].
 class OfflineException implements Exception {
   final String feature;
   OfflineException([this.feature = 'This feature']);
@@ -37,20 +40,60 @@ class RituvaApi {
   static const _timeout = Duration(seconds: 15);   // headroom for the LLM-bearing /plans call
 
   String baseUrl;
-  bool offline = false; // true once any call has fallen back to the demo bundle
-  Map<String, dynamic>? _demo;
+  bool offline = false;  // true once any call has fallen back to the on-device engine
+
+  /// The on-device planner. Answers every read the app makes, using the bundled
+  /// Knowledge DB (or a fuller one the user downloaded), so the app is fully usable
+  /// with no server at all.
+  final LocalEngine local = LocalEngine();
 
   RituvaApi._(this.baseUrl);
 
-  /// Builds a client, restoring a user-saved server URL if one exists.
+  /// Builds a client, restoring a user-saved server URL if one exists, and pointing the
+  /// engine at a previously downloaded library if there is one.
   static Future<RituvaApi> create() async {
     var url = _default;
     try {
       final saved = (await SharedPreferences.getInstance()).getString(_prefKey);
       if (saved != null && saved.trim().isNotEmpty) url = saved.trim();
     } catch (_) {/* prefs unavailable → default */}
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      KB.downloadPath = '${dir.path}/rituva_kb_full.json';
+    } catch (_) {/* no writable dir → bundled KB only */}
     return RituvaApi._(url);
   }
+
+  /// Pull the server's full Knowledge DB onto the device for offline use.
+  ///
+  /// This is how the personal-use IFCT library reaches the phone without ever entering
+  /// the repo or an APK: it moves from the user's own machine to the user's own device.
+  /// Returns a short summary of what landed.
+  Future<Map<String, dynamic>> downloadLibrary() async {
+    final path = KB.downloadPath;
+    if (path == null) throw Exception('No writable storage on this device.');
+    final r = await http.get(_u('/kb/export')).timeout(const Duration(seconds: 60));
+    if (r.statusCode >= 400) throw Exception('GET /kb/export → ${r.statusCode}');
+    final body = jsonDecode(r.body) as Map<String, dynamic>;
+    final foods = (body['foods'] as List?)?.length ?? 0;
+    final recipes = (body['recipes'] as List?)?.length ?? 0;
+    if (foods == 0 || recipes == 0) throw Exception('Server returned an empty library.');
+    await File(path).writeAsString(r.body);
+    await local.refreshKb();
+    return {'foods': foods, 'recipes': recipes,
+            'llm_recipes': (body['llm_recipes'] as Map?)?.length ?? 0};
+  }
+
+  /// Forget a downloaded library and fall back to the bundled one.
+  Future<void> clearLibrary() async {
+    final path = KB.downloadPath;
+    if (path == null) return;
+    final f = File(path);
+    if (await f.exists()) await f.delete();
+    await local.refreshKb();
+  }
+
+  Future<Map<String, dynamic>> libraryInfo() => local.info();
 
   static String get defaultUrl => _default;
   bool get isDefaultUrl => baseUrl == _default;
@@ -96,21 +139,14 @@ class RituvaApi {
       e is HandshakeException ||
       e is http.ClientException;
 
-  // -------------------------------------------------------- demo bundle ----
-  Future<Map<String, dynamic>> _bundle() async {
-    _demo ??= jsonDecode(await rootBundle.loadString('assets/demo.json')) as Map<String, dynamic>;
-    return _demo!;
-  }
+  // ------------------------------------------- endpoints (live → on-device) ----
+  // Each read tries the server first and falls back to [local], the on-device
+  // deterministic engine. The fallback is not a frozen sample any more: it plans,
+  // validates, swaps and costs out groceries from the Knowledge DB on the phone, so
+  // "offline" means "computed here", not "degraded".
 
-  Map<String, dynamic> _member(Map<String, dynamic> b, String id) {
-    final bm = b['byMember'] as Map<String, dynamic>;
-    return (bm[id] ?? bm['aarav']) as Map<String, dynamic>;
-  }
-
-  // ------------------------------------------------ endpoints (live→demo) ----
-  /// Fast reachability probe (2 s) — sets [offline] so the subsequent read calls
-  /// short-circuit to the bundled demo instead of each waiting out the full timeout.
-  /// This keeps startup snappy when a configured server is unreachable.
+  /// Fast reachability probe — sets [offline] so subsequent calls go straight to the
+  /// local engine instead of each waiting out the full timeout.
   Future<bool> reachable() async {
     try {
       final r = await http.get(_u('/health')).timeout(const Duration(seconds: 3));
@@ -122,245 +158,131 @@ class RituvaApi {
     }
   }
 
-  Future<Map<String, dynamic>> context() async {
-    if (offline) return _localContext();
+  /// Run everything on-device even when a server is reachable.
+  bool preferOffline = false;
+
+  bool get _useLocal => offline || preferOffline;
+
+  Future<T> _tryServer<T>(Future<T> Function() remote, Future<T> Function() fallback) async {
+    if (_useLocal) return fallback();
     try {
-      final v = await _get('/context') as Map<String, dynamic>;
+      final v = await remote();
       offline = false;
       return v;
     } catch (e) {
       if (_isNet(e)) {
         offline = true;
-        return _localContext();
+        return fallback();
       }
       rethrow;
     }
   }
 
-  Future<List> members() async {
-    if (offline) return (await _bundle())['members'] as List;
-    try {
-      final v = await _get('/members') as List;
-      offline = false;
-      return v;
-    } catch (e) {
-      if (_isNet(e)) {
-        offline = true;
-        return (await _bundle())['members'] as List;
-      }
-      rethrow;
-    }
-  }
+  Future<Map<String, dynamic>> context() async =>
+      _tryServer(() async => await _get('/context') as Map<String, dynamic>,
+          () async => _localContext());
 
-  Future<Map<String, dynamic>> member(String id) async {
-    if (offline) {
-      final ms = (await _bundle())['members'] as List;
-      return ms.firstWhere((m) => m['id'] == id, orElse: () => ms.first) as Map<String, dynamic>;
-    }
-    try {
-      final v = await _get('/members/$id') as Map<String, dynamic>;
-      offline = false;
-      return v;
-    } catch (e) {
-      if (_isNet(e)) {
-        offline = true;
-        final ms = (await _bundle())['members'] as List;
-        return ms.firstWhere((m) => m['id'] == id, orElse: () => ms.first) as Map<String, dynamic>;
-      }
-      rethrow;
-    }
-  }
+  Future<List> members() async =>
+      _tryServer(() async => await _get('/members') as List, () => local.members());
 
-  Future<Map<String, dynamic>> targets(String id) async {
-    if (offline) return _member(await _bundle(), id)['targets'] as Map<String, dynamic>;
-    try {
-      final v = await _get('/members/$id/targets') as Map<String, dynamic>;
-      offline = false;
-      return v;
-    } catch (e) {
-      if (_isNet(e)) {
-        offline = true;
-        return _member(await _bundle(), id)['targets'] as Map<String, dynamic>;
-      }
-      rethrow;
-    }
-  }
+  Future<Map<String, dynamic>> member(String id) async => _tryServer(
+      () async => await _get('/members/$id') as Map<String, dynamic>,
+      () => local.member(id));
 
-  Future<Map<String, dynamic>> createPlan(String id, {int days = 7, String? start, int variant = 0}) async {
-    if (offline) return _member(await _bundle(), id)['plan'] as Map<String, dynamic>;
-    try {
-      final v = await _post('/plans',
-              {'member_id': id, 'days': days, 'variant': variant, if (start != null) 'start': start})
-          as Map<String, dynamic>;
-      offline = false;
-      return v;
-    } catch (e) {
-      if (_isNet(e)) {
-        offline = true;
-        return _member(await _bundle(), id)['plan'] as Map<String, dynamic>;
-      }
-      rethrow;
-    }
-  }
+  Future<Map<String, dynamic>> targets(String id) async => _tryServer(
+      () async => await _get('/members/$id/targets') as Map<String, dynamic>,
+      () => local.targets(id));
 
-  Future<Map<String, dynamic>> grocery(String planId, {int people = 2}) async {
-    try {
-      final v = await _get('/plans/$planId/grocery', {'people': people}) as Map<String, dynamic>;
-      offline = false;
-      return v;
-    } catch (e) {
-      if (_isNet(e)) {
-        offline = true;
-        final bm = (await _bundle())['byMember'] as Map<String, dynamic>;
-        for (final v in bm.values) {
-          if ((v['plan'] as Map)['plan_id'] == planId) return v['grocery'] as Map<String, dynamic>;
-        }
-        return (bm['aarav'] as Map)['grocery'] as Map<String, dynamic>;
-      }
-      rethrow;
-    }
-  }
-
-  Future<Map<String, dynamic>> alternatives(String id, String recipeId, String day) async {
-    try {
-      final v = await _get('/members/$id/alternatives', {'recipe_id': recipeId, 'day': day})
-          as Map<String, dynamic>;
-      offline = false;
-      return v;
-    } catch (e) {
-      if (_isNet(e)) {
-        offline = true;
-        throw OfflineException('Swapping dishes');
-      }
-      rethrow;
-    }
-  }
-
-  /// Browse the dish library (Discover). Server-only (throws offline).
-  Future<List> recipes({String? region, String? role}) async {
-    try {
-      final v = await _get('/recipes',
-              {if (region != null) 'region': region, if (role != null) 'role': role})
-          as Map<String, dynamic>;
-      offline = false;
-      return v['recipes'] as List;
-    } catch (e) {
-      if (_isNet(e)) {
-        offline = true;
-        throw OfflineException('Browsing all dishes');
-      }
-      rethrow;
-    }
-  }
-
-  /// Full recipe card: DB ingredient breakdown, nutrients, cooking method, chef videos.
-  /// Server-only — the bundled demo carries plans, not the whole dish library.
-  Future<Map<String, dynamic>> recipe(String recipeId, {bool llm = false}) async {
-    try {
-      final v = await _get('/recipes/$recipeId', {if (llm) 'llm': 1}) as Map<String, dynamic>;
-      offline = false;
-      return v;
-    } catch (e) {
-      if (_isNet(e)) {
-        offline = true;
-        throw OfflineException('Recipes & cooking steps');
-      }
-      rethrow;
-    }
-  }
-
-  Future<Map<String, dynamic>> memory(String id) async {
-    try {
-      final v = await _get('/members/$id/memory') as Map<String, dynamic>;
-      offline = false;
-      return v;
-    } catch (e) {
-      if (_isNet(e)) {
-        offline = true;
-        return {
+  Future<Map<String, dynamic>> createPlan(String id,
+          {int days = 7, String? start, int variant = 0}) async =>
+      _tryServer(
+        () async => await _post('/plans', {
           'member_id': id,
-          'memory': {'never': [], 'dislike': [], 'like': []},
-        };
-      }
-      rethrow;
-    }
-  }
+          'days': days,
+          'variant': variant,
+          if (start != null) 'start': start,
+        }) as Map<String, dynamic>,
+        () => local.createPlan(id, days: days, start: start, variant: variant),
+      );
 
-  Future<void> addMemory(String id, String kind, String value) async {
-    try {
-      await _post('/members/$id/memory', {'kind': kind, 'value': value});
-      offline = false;
-    } catch (e) {
-      if (_isNet(e)) {
-        offline = true;
-        throw OfflineException('Saving preferences');
-      }
-      rethrow;
-    }
-  }
+  /// Grocery list. Offline needs the plan itself (the server looks it up by id), so
+  /// callers pass the plan they already hold.
+  Future<Map<String, dynamic>> grocery(String planId,
+          {int people = 2, Map<String, dynamic>? plan}) async =>
+      _tryServer(
+        () async =>
+            await _get('/plans/$planId/grocery', {'people': people}) as Map<String, dynamic>,
+        () async => plan == null
+            ? throw OfflineException('The grocery list')
+            : await local.grocery(plan, people: people),
+      );
 
-  Future<void> removeMemory(String id, String kind, String value) async {
-    try {
-      await _delete('/members/$id/memory', {'kind': kind, 'value': value});
-      offline = false;
-    } catch (e) {
-      if (_isNet(e)) {
-        offline = true;
-        throw OfflineException('Saving preferences');
-      }
-      rethrow;
-    }
-  }
+  Future<Map<String, dynamic>> alternatives(String id, String recipeId, String day) async =>
+      _tryServer(
+        () async => await _get('/members/$id/alternatives',
+            {'recipe_id': recipeId, 'day': day}) as Map<String, dynamic>,
+        () => local.alternatives(id, recipeId),
+      );
 
-  Future<Map<String, dynamic>> adherence(String id, String day, String planId) async {
-    try {
-      final v = await _get('/members/$id/adherence', {'date': day, 'plan_id': planId})
-          as Map<String, dynamic>;
-      offline = false;
-      return v;
-    } catch (e) {
-      if (_isNet(e)) {
-        offline = true;
-        throw OfflineException('Logging & adherence');
-      }
-      rethrow;
-    }
-  }
+  /// Browse the dish library (Discover).
+  Future<List> recipes({String? region, String? role}) async => _tryServer(
+        () async {
+          final v = await _get('/recipes', {
+            if (region != null) 'region': region,
+            if (role != null) 'role': role,
+          }) as Map<String, dynamic>;
+          return v['recipes'] as List;
+        },
+        () => local.recipes(region: region, role: role),
+      );
 
-  /// Log a day's dishes as eaten (each recipe expands to its ingredient BOM server-side).
-  Future<void> logDayAsEaten(String id, String day, List<String> recipeIds) async {
-    try {
-      await _post('/members/$id/intake', {
-        'date': day,
-        'items': [for (final r in recipeIds) {'recipe_id': r, 'scale': 1.0}],
-      });
-      offline = false;
-    } catch (e) {
-      if (_isNet(e)) {
-        offline = true;
-        throw OfflineException('Logging meals');
-      }
-      rethrow;
-    }
-  }
+  /// Full recipe card: DB ingredients, cooking method, chef videos.
+  Future<Map<String, dynamic>> recipe(String recipeId, {bool llm = true}) async => _tryServer(
+        () async =>
+            await _get('/recipes/$recipeId', {if (llm) 'llm': 1}) as Map<String, dynamic>,
+        () => local.recipe(recipeId),
+      );
 
-  /// Create or update a member profile (server upserts by id). Server-only.
-  Future<Map<String, dynamic>> saveMember(Map<String, dynamic> m) async {
-    try {
-      final v = await _post('/members', m) as Map<String, dynamic>;
-      offline = false;
-      return v;
-    } catch (e) {
-      if (_isNet(e)) {
-        offline = true;
-        throw OfflineException('Saving a profile');
-      }
-      rethrow;
-    }
-  }
+  Future<Map<String, dynamic>> memory(String id) async => _tryServer(
+      () async => await _get('/members/$id/memory') as Map<String, dynamic>,
+      () => local.memory(id));
 
-  /// Ask the LLM about a day's meals (trivia / Q&A, grounded in the DB). Server-only.
+  Future<void> addMemory(String id, String kind, String value) async => _tryServer(
+      () async => await _post('/members/$id/memory', {'kind': kind, 'value': value}),
+      () => local.addMemory(id, kind, value));
+
+  Future<void> removeMemory(String id, String kind, String value) async => _tryServer(
+      () async => await _delete('/members/$id/memory', {'kind': kind, 'value': value}),
+      () => local.removeMemory(id, kind, value));
+
+  Future<Map<String, dynamic>> adherence(String id, String day, String planId,
+          {Map<String, dynamic>? plan}) async =>
+      _tryServer(
+        () async => await _get('/members/$id/adherence', {'date': day, 'plan_id': planId})
+            as Map<String, dynamic>,
+        () => local.adherence(id, day, plan),
+      );
+
+  /// Log a day's dishes as eaten (each recipe expands to its ingredients for the totals).
+  Future<void> logDayAsEaten(String id, String day, List<String> recipeIds) async =>
+      _tryServer(
+        () async => await _post('/members/$id/intake', {
+          'date': day,
+          'items': [for (final r in recipeIds) {'recipe_id': r, 'scale': 1.0}],
+        }),
+        () => local.logDayAsEaten(id, day, recipeIds),
+      );
+
+  /// Create or update a member profile (upsert by id), on the server or on the device.
+  Future<Map<String, dynamic>> saveMember(Map<String, dynamic> m) async => _tryServer(
+        () async => await _post('/members', m) as Map<String, dynamic>,
+        () => local.saveMember(m),
+      );
+
+  /// Ask the LLM about a day's meals. The one genuinely server-only feature: running a
+  /// language model needs the backend, and the app will not fake an answer offline.
   Future<String> ask(String id, String question, {String? planId, String? date}) async {
+    if (_useLocal) throw OfflineException('The meal assistant');
     try {
       final v = await _post('/members/$id/ask', {
         'question': question,

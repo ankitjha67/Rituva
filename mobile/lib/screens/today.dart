@@ -78,7 +78,8 @@ class TodayScreen extends StatelessWidget {
     }
     try {
       await api.logDayAsEaten(memberId, day['date'] as String, ids);
-      final adh = await api.adherence(memberId, day['date'] as String, plan['plan_id'] as String);
+      final adh = await api.adherence(memberId, day['date'] as String, plan['plan_id'] as String,
+          plan: plan);
       if (context.mounted) _showAdherence(context, adh);
     } catch (e) {
       if (context.mounted) {

@@ -7,6 +7,8 @@ here is produced by an LLM.
 """
 from __future__ import annotations
 
+import os as _os
+
 from .domain import (
     DietType, FoodComposition, Goal, Member, Recipe, RecipeIngredient, Region, Role, Season, Sex,
 )
@@ -136,10 +138,14 @@ FOODS = {f.id: f for f in _FOOD_LIST}
 # Optional LOCAL IFCT 2017 food data (rituva/ifct_local.py) — ~500+ foods extracted for
 # PERSONAL USE per IFCT terms. It is gitignored, so it is absent in the public repo / CI,
 # where the KB simply falls back to the curated set above. Curated ids win on collision.
+# Set RITUVA_NO_LOCAL_KB=1 to ignore them even when present — used when exporting a KB
+# that will be redistributed (e.g. bundled into the public APK), where IFCT-derived rows
+# must not travel.
 try:
-    from .ifct_local import IFCT_FOODS as _IFCT_FOODS
-    for _food in _IFCT_FOODS:
-        FOODS.setdefault(_food.id, _food)
+    if _os.environ.get("RITUVA_NO_LOCAL_KB") != "1":
+        from .ifct_local import IFCT_FOODS as _IFCT_FOODS
+        for _food in _IFCT_FOODS:
+            FOODS.setdefault(_food.id, _food)
 except ImportError:
     pass
 
@@ -277,10 +283,11 @@ RECIPES = {r.id: r for r in _RECIPES}
 # home-cooking templates over the local food DB. Gitignored (many dishes use IFCT-derived
 # foods), so absent in the public repo / CI, where RECIPES stays the curated set above.
 try:
-    from .recipes_local import RECIPES_LOCAL as _RECIPES_LOCAL
-    for _recipe in _RECIPES_LOCAL:
-        if all(ing.food_id in FOODS for ing in _recipe.ingredients):   # only fully-resolvable dishes
-            RECIPES.setdefault(_recipe.id, _recipe)
+    if _os.environ.get("RITUVA_NO_LOCAL_KB") != "1":
+        from .recipes_local import RECIPES_LOCAL as _RECIPES_LOCAL
+        for _recipe in _RECIPES_LOCAL:
+            if all(ing.food_id in FOODS for ing in _recipe.ingredients):   # only fully-resolvable
+                RECIPES.setdefault(_recipe.id, _recipe)
 except ImportError:
     pass
 

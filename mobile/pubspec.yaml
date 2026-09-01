@@ -13,6 +13,7 @@ dependencies:
   cupertino_icons: ^1.0.6
   shared_preferences: ^2.2.2
   url_launcher: ^6.2.5
+  path_provider: ^2.1.2      # where a downloaded full KB is stored for offline use
 
 dev_dependencies:
   flutter_lints: ^4.0.0
@@ -33,3 +34,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/demo.json
+    - assets/kb.json      # curated Knowledge DB — powers the offline engine

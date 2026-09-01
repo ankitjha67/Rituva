@@ -87,10 +87,6 @@ class _HomeShellState extends State<HomeShell> {
   Future<void> _regenerate() async {
     final a = api;
     if (a == null || ctx == null || loading || busy) return;
-    if (offline) {
-      _snack('Connect a server (Profile → Server) to regenerate your menu.');
-      return;
-    }
     setState(() => busy = true);   // inline — the screen stays mounted, a thin bar shows progress
     variant++;
     try {
@@ -246,7 +242,7 @@ class _OfflineBanner extends StatelessWidget {
                 Icon(Icons.cloud_off, size: 15, color: R.gold),
                 SizedBox(width: 8),
                 Expanded(
-                  child: Text('Offline demo — bundled sample plan. Tap to connect your server.',
+                  child: Text('Offline — menus planned on this phone. Tap for server settings.',
                       style: TextStyle(color: R.gold, fontSize: 11.5)),
                 ),
                 Icon(Icons.chevron_right, size: 16, color: R.gold),
@@ -351,6 +347,21 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   late final TextEditingController urlCtrl = TextEditingController(text: widget.serverUrl);
+  Map<String, dynamic>? lib;
+  bool syncing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLib();
+  }
+
+  Future<void> _loadLib() async {
+    try {
+      final v = await widget.api.libraryInfo();
+      if (mounted) setState(() => lib = v);
+    } catch (_) {/* engine unavailable — card just shows nothing */}
+  }
 
   @override
   void dispose() {
@@ -358,12 +369,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  void _editProfile(BuildContext context, Map<String, dynamic>? m) {
-    if (widget.offline) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Connect a server (Server card below) to create or edit profiles.')));
-      return;
+  Future<void> _download() async {
+    setState(() => syncing = true);
+    try {
+      final r = await widget.api.downloadLibrary();
+      await _loadLib();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('Saved ${r['recipes']} dishes and ${r['foods']} foods for offline use.'),
+        ));
+      }
+      await widget.onSaved();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('Could not download: $e'),
+        ));
+      }
     }
+    if (mounted) setState(() => syncing = false);
+  }
+
+  void _editProfile(BuildContext context, Map<String, dynamic>? m) {
+    // Profiles save to the device when there's no server, so this works either way.
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -431,6 +461,58 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ]),
         const SizedBox(height: 18),
+        // ---- Offline library ----
+        const Text('OFFLINE LIBRARY',
+            style: TextStyle(color: R.muted, fontSize: 11, letterSpacing: 1.2)),
+        const SizedBox(height: 8),
+        Card(
+          color: R.surface,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Icon(lib?['full'] == true ? Icons.offline_pin : Icons.offline_bolt,
+                      size: 16, color: lib?['full'] == true ? R.green : R.teal),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      lib == null
+                          ? 'Checking…'
+                          : '${lib!['recipes']} dishes · ${lib!['foods']} foods on this phone'
+                              '${lib!['full'] == true ? ' (full library)' : ' (built-in)'}',
+                      style: TextStyle(
+                          color: lib?['full'] == true ? R.green : R.teal, fontSize: 12),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 8),
+                const Text(
+                  'Menus, swaps, recipes, groceries and analytics are all computed on this '
+                  'phone — no server needed. Download your full library once while the '
+                  'server is reachable to get every dish offline too.',
+                  style: TextStyle(color: R.muted, fontSize: 11),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    onPressed: syncing ? null : _download,
+                    icon: syncing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: R.gold))
+                        : const Icon(Icons.download_for_offline_outlined, size: 18),
+                    label: Text(syncing ? 'Downloading…' : 'Download full library'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
         // ---- Server URL ----
         const Text('SERVER', style: TextStyle(color: R.muted, fontSize: 11, letterSpacing: 1.2)),
         const SizedBox(height: 8),
@@ -448,7 +530,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Expanded(
                     child: Text(
                       widget.offline
-                          ? 'Offline — showing the bundled demo plan.'
+                          ? 'No server — everything is computed on this phone.'
                           : 'Connected to ${widget.serverUrl}',
                       style: TextStyle(color: widget.offline ? R.gold : R.green, fontSize: 12),
                     ),

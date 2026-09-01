@@ -199,7 +199,7 @@ class PlanScreen extends StatelessWidget {
       isScrollControlled: true,
       useSafeArea: true,
       builder: (_) => FutureBuilder(
-        future: api.grocery(plan['plan_id'] as String, people: 2),
+        future: api.grocery(plan['plan_id'] as String, people: 2, plan: plan),
         builder: (c, snap) {
           if (snap.hasError) {
             return SizedBox(
