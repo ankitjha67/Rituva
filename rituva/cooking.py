@@ -728,11 +728,15 @@ def llm_recipe(recipe: Recipe, provider: str, api_key: str, force: bool = False)
     gw = build_gateway(provider, api_key)
     for attempt in range(2):                     # one retry — models often comply on the 2nd
         try:
-            # prefer_fast + 35 s: the small instruct models write a recipe in 15-25 s. Left
-            # to its own order the router opened with a 70B model and burned the whole
-            # timeout, making a single dish take 80-100 s.
+            # 150 s. A recipe took ~16 s on 2026-09-01 and ~115 s a few hours later on the
+            # same model and prompt — the hosted endpoint's throughput for long generations
+            # varies by an order of magnitude, while trivial prompts stay under a second.
+            # A tight timeout here doesn't fail fast, it fails *silently*: every model times
+            # out, the router reaches the no-LLM path, and the result is indistinguishable
+            # from "the model wrote nothing usable". Generation is cached and runs off the
+            # hot path, so waiting is cheap and giving up is expensive.
             res = gw.generate(prompt, schema=_RECIPE_SCHEMA, temperature=0.4 + 0.2 * attempt,
-                              prefer_fast=True, timeout=35.0)
+                              prefer_fast=True, timeout=150.0)
             if not res.ok or not res.text:
                 REJECTIONS["llm_call_failed"] += 1
                 continue

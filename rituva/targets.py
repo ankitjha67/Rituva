@@ -23,11 +23,15 @@ PROTEIN_G_PER_KG = {                 # goal -> g/kg (DGI p.58 RDA 0.83; muscle �
     Goal.MAINTAIN: 1.0, Goal.LOSE: 1.2, Goal.GAIN: 1.4, Goal.MUSCLE: 1.5,
 }
 GOAL_KCAL_ADJ = {Goal.MAINTAIN: 0, Goal.LOSE: -500, Goal.GAIN: 350, Goal.MUSCLE: 300}
-# Micronutrient RDAs — ICMR-NIN 2020 (adults). Iron is sex-specific (menstrual losses).
+# Micronutrient RDAs — ICMR-NIN 2020 revision (adults). Iron is sex-specific (menstrual
+# losses). NB these deliberately differ from the table in `rda.py`, which reproduces the
+# older ICMR 2010 annexure as printed in the NIN guidelines manual: 2020 raised iron
+# (17/21 -> 19/29), calcium (600 -> 1000) and B12 (1 -> 2.2). We plan against the current
+# revision; `rda.RECONCILIATION` explains the gap wherever both are shown.
 IRON_MG_RDA = {Sex.M: 19.0, Sex.F: 29.0}
 CALCIUM_MG_RDA = 1000.0
 B12_UG_RDA = 2.2
-CITATIONS = ("DGI 2024 p.54/58", "WHO FS-394", "ICMR-NIN RDA 2020")
+CITATIONS = ("DGI 2024 p.54/58", "WHO FS-394", "ICMR-NIN RDA 2020 (iron/calcium/B12)")
 
 
 def bmi(weight_kg: float, height_cm: float) -> float:

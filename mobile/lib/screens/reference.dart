@@ -93,6 +93,10 @@ class _ReferenceScreenState extends State<ReferenceScreen> {
         _matchedCard(matched),
         const SizedBox(height: 16),
       ],
+      if ((data!['reconciliation'] as List?)?.isNotEmpty ?? false) ...[
+        _reconciliationCard(),
+        const SizedBox(height: 16),
+      ],
       SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -148,6 +152,64 @@ class _ReferenceScreenState extends State<ReferenceScreen> {
           ],
         ),
       );
+
+  /// Why this table and the app's own targets can disagree. Shown up front rather than
+  /// buried, because the alternative is a reader spotting two different numbers for the
+  /// same nutrient and trusting neither.
+  Widget _reconciliationCard() {
+    final rows = (data!['reconciliation'] as List?) ?? const [];
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: R.violet.withOpacity(.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: R.violet.withOpacity(.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: const [
+            Icon(Icons.compare_arrows, size: 15, color: R.violet),
+            SizedBox(width: 7),
+            Text('WHY YOUR TARGETS DIFFER FROM THIS TABLE',
+                style: TextStyle(color: R.violet, fontSize: 10.5, letterSpacing: 1)),
+          ]),
+          const SizedBox(height: 8),
+          Text('${data!['reconciliation_note'] ?? ''}',
+              style: const TextStyle(fontSize: 12, height: 1.4)),
+          const SizedBox(height: 12),
+          Row(children: const [
+            Expanded(flex: 4, child: Text('NUTRIENT',
+                style: TextStyle(color: R.muted, fontSize: 9.5, letterSpacing: .8))),
+            Expanded(flex: 4, child: Text('THIS TABLE',
+                style: TextStyle(color: R.muted, fontSize: 9.5, letterSpacing: .8))),
+            Expanded(flex: 4, child: Text('YOUR PLAN',
+                style: TextStyle(color: R.muted, fontSize: 9.5, letterSpacing: .8))),
+          ]),
+          const Divider(color: R.line, height: 12),
+          for (final r in rows) ...[
+            Row(children: [
+              Expanded(flex: 4,
+                  child: Text('${r['nutrient']}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+              Expanded(flex: 4,
+                  child: Text('${r['table']}', style: const TextStyle(fontSize: 11.5, color: R.muted))),
+              Expanded(flex: 4,
+                  child: Text('${r['planning']}',
+                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: R.violet))),
+            ]),
+            Padding(
+              padding: const EdgeInsets.only(top: 3, bottom: 9),
+              child: Text('${r['why']}',
+                  style: const TextStyle(color: R.muted, fontSize: 10.5, height: 1.35)),
+            ),
+          ],
+          Text('Table edition: ${data!['edition'] ?? ''}',
+              style: const TextStyle(color: R.muted, fontSize: 10)),
+        ],
+      ),
+    );
+  }
 
   Widget _big(String v, String label) => Expanded(
         child: Column(children: [

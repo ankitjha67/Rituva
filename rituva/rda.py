@@ -22,11 +22,43 @@ from __future__ import annotations
 
 from typing import Optional
 
-SOURCE = "ICMR-NIN, Dietary Guidelines for Indians — Annexure 3 (RDA), pp. 89-90"
+SOURCE = ("ICMR-NIN, *Dietary Guidelines for Indians — A Manual* (National Institute of "
+          "Nutrition, Hyderabad; document dated 2012), Annexure 3, pp. 89-90. The "
+          "allowances in that annexure are the ICMR 2010 revision.")
+EDITION = "ICMR 2010 RDA, as printed in the NIN Dietary Guidelines manual (2012)"
+
 UNIT_NOTE = (
     "Vitamin A, folate and vitamin B12 are micrograms (µg) per day. The source table's "
     "header prints 'mg' for these columns, but the values are µg — the µ glyph is lost "
     "in parts of the PDF. ICMR's vitamin A allowance is 600 µg retinol equivalent."
+)
+
+# Where this table and the app's own planning targets disagree — and they do, because
+# they are different editions ten years apart. Surfacing this is not optional: without
+# it, Analytics would say "iron 29 mg" while the reference table said "21 mg" for the
+# same woman, and a reader would rightly not trust either number.
+#
+# `table` is what the 2010 annexure above prints; `planning` is what `targets.py` uses to
+# build menus (the ICMR-NIN 2020 revision, which raised all three). The app plans against
+# the newer figures because they are the current standard, and shows both here.
+RECONCILIATION = [
+    {"nutrient": "Iron", "unit": "mg/day",
+     "table": "17 (man) · 21 (woman)", "planning": "19 (man) · 29 (woman)",
+     "why": "The 2020 revision raised iron for adults, most sharply for women of "
+            "reproductive age, on updated absorption and menstrual-loss estimates."},
+    {"nutrient": "Calcium", "unit": "mg/day",
+     "table": "600 (adults)", "planning": "1000 (adults)",
+     "why": "The 2020 revision raised adult calcium from 600 to 1000 mg/day."},
+    {"nutrient": "Vitamin B12", "unit": "µg/day",
+     "table": "1", "planning": "2.2",
+     "why": "The 2020 revision more than doubled the B12 allowance — relevant here, since "
+            "a lacto-vegetarian diet gets B12 only from dairy."},
+]
+RECONCILIATION_NOTE = (
+    "Menus are planned against the newer ICMR-NIN 2020 allowances, so the targets on "
+    "Today and Analytics can read higher than this table for iron, calcium and B12. "
+    "The table is reproduced as printed rather than quietly updated, because only some "
+    "of its values changed in 2020 and the rest are unchanged."
 )
 
 
@@ -281,7 +313,10 @@ def to_dict() -> dict:
     """The whole reference, JSON-ready — served by the API and bundled for offline use."""
     return {
         "source": SOURCE,
+        "edition": EDITION,
         "unit_note": UNIT_NOTE,
+        "reconciliation": RECONCILIATION,
+        "reconciliation_note": RECONCILIATION_NOTE,
         "units": {
             "kcal": "kcal/day", "protein_g": "g/day", "visible_fat_g": "g/day",
             "calcium_mg": "mg/day", "iron_mg": "mg/day", "vit_a_ug": "µg/day",
