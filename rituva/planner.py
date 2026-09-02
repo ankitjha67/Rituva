@@ -162,6 +162,33 @@ def _format(r: Recipe) -> str:
     return words[-1] if words else r.id
 
 
+_PDENS: Dict[str, float] = {}
+
+
+def _protein_density(r: Recipe) -> float:
+    """Grams of protein per 100 kcal, from the DB. A measured property of the dish rather
+    than the hand-applied `high_protein` tag, so it ranks the whole library consistently."""
+    v = _PDENS.get(r.id)
+    if v is None:
+        n = make_component(r).nutrients
+        v = _PDENS[r.id] = (n["protein"] / max(n["kcal"], 1.0)) * 100.0
+    return v
+
+
+# Least-recently-used weighting. The cap is what decides how much of the library a year
+# of menus actually visits: at the original (12 days x 0.1) the bonus maxed at +1.2 and
+# could never outweigh the +3.0 region preference, so a 1302-dish library collapsed onto
+# 163 dishes, each recurring ~53 times a year. Raising it to (90 x 0.06) lets a dish
+# unseen for seven weeks outrank a regional favourite, which lifts a year to 514 distinct
+# dishes with a worst-case 32 repeats. Measured, not guessed — see the commit message.
+_LRU_CAP_DAYS = 90
+_LRU_WEIGHT = 0.06
+# Variety alone costs protein: the dishes it surfaces are lower in it, and for a muscle
+# goal that pushed 37 days a year under the hard protein floor. Ranking on protein
+# density claws that back (92 g/day average, same as before) while keeping the variety.
+_PROTEIN_DENSITY_WEIGHT = 0.25
+
+
 def _score(r: Recipe, member: Member, ledger: Ledger, di: int) -> float:
     """Quality score for ranking candidates — deliberately variant-independent so the
     'top-K best' set is stable. Regenerate variety comes from _variant_choice picking a
@@ -171,8 +198,10 @@ def _score(r: Recipe, member: Member, ledger: Ledger, di: int) -> float:
         s += 3.0
     if "high_protein" in r.tags and member.goal == Goal.MUSCLE:
         s += 2.0
+    if member.goal in (Goal.MUSCLE, Goal.GAIN):
+        s += min(_protein_density(r), 12.0) * _PROTEIN_DENSITY_WEIGHT
     s -= ledger._count(ledger.fmt_days.get(_format(r), []), di, window=2) * 0.9   # spread formats (no back-to-back chillas)
-    s += min(ledger.days_since(r, di), 12) * 0.1            # favour least-recently-used
+    s += min(ledger.days_since(r, di), _LRU_CAP_DAYS) * _LRU_WEIGHT   # favour least-recently-used
     # Stable tie-break for variety. NB: Python's built-in hash() of a str is salted by
     # PYTHONHASHSEED, so it varies per process — using it here made plans (and tests, and
     # the offline demo) non-reproducible. crc32 is stable across processes.

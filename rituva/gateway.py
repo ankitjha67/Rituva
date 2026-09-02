@@ -28,10 +28,15 @@ from typing import Dict, List, Optional
 # fixed list has no way to notice. Live discovery (cached, below) is the real defence;
 # this list is only the fallback, verified working on 2026-09-01.
 NVIDIA_BASE = "https://integrate.api.nvidia.com/v1"
+# Measured by scripts/probe_models.py on 2026-09-02: of 49 plausible chat models only 7
+# were deployed, and only these 4 completed a real recipe with the app's JSON schema.
+# Ordered by that measurement, not by size or name — the 120B answers in a tenth of the
+# time of the 20B, which no heuristic would have guessed.
 NVIDIA_DEFAULTS = [
-    "openai/gpt-oss-20b",                      # fastest verified (~16 s for a recipe)
-    "nvidia/nemotron-3.5-lightning-30b-a3b",   # ~38 s
-    "minimaxai/minimax-m3",                    # ~31 s
+    "openai/gpt-oss-120b",                # recipe 10.2 s
+    "nvidia/nemotron-3-ultra-550b-a55b",  # recipe 71.5 s
+    "minimaxai/minimax-m3",               # recipe 79.9 s
+    "openai/gpt-oss-20b",                 # recipe 116.0 s
 ]
 
 # Listed-but-not-deployed models answer /models yet 404 on inference, and plenty of

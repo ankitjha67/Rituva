@@ -308,13 +308,39 @@ class Ledger {
   }
 }
 
+// Least-recently-used weighting — kept identical to planner.py, since the two engines
+// must produce the same menu for the same input. The cap decides how much of the library
+// a year of menus visits: at the original (12 days x 0.1) the bonus maxed at +1.2 and
+// could never outweigh the +3.0 region preference, so a 1302-dish library collapsed onto
+// 163 dishes each recurring ~53 times a year. (90 x 0.06) lifts a year to 514 distinct
+// dishes with a worst case of 32 repeats.
+const _lruCapDays = 90;
+const _lruWeight = 0.06;
+// Variety alone costs protein — for a muscle goal it put 37 days a year under the hard
+// protein floor. Ranking on measured protein density claws that back without giving up
+// the variety.
+const _proteinDensityWeight = 0.25;
+
+final Map<String, double> _pdens = {};
+
+/// Grams of protein per 100 kcal, from the DB — a measured property of the dish rather
+/// than the hand-applied `high_protein` tag.
+double _proteinDensity(KB kb, Recipe r) => _pdens.putIfAbsent(r.id, () {
+      final n = makeComponent(kb, r).nutrients;
+      return (n['protein'] ?? 0) / math.max(n['kcal'] ?? 1, 1) * 100.0;
+    });
+
 double _score(KB kb, Recipe r, Map member, Ledger led, int di) {
   var s = 0.0;
   final prefs = ((member['region_prefs'] as List?) ?? const []).map((e) => '$e').toSet();
+  final goal = '${member['goal']}';
   if (r.region != null && prefs.contains(r.region)) s += 3.0;
-  if (r.tags.contains('high_protein') && '${member['goal']}' == 'muscle') s += 2.0;
+  if (r.tags.contains('high_protein') && goal == 'muscle') s += 2.0;
+  if (goal == 'muscle' || goal == 'gain') {
+    s += math.min(_proteinDensity(kb, r), 12.0) * _proteinDensityWeight;
+  }
   s -= Ledger._count(led.fmtDays[dishFormat(r)], di, window: 2) * 0.9;
-  s += math.min(led.daysSince(r, di), 12) * 0.1;
+  s += math.min(led.daysSince(r, di), _lruCapDays) * _lruWeight;
   s += ((Crc32.of(r.id) + di * 7) % 5) * 0.06;
   return s;
 }
