@@ -59,7 +59,6 @@ Component makeComponent(KB kb, Recipe r, [double scale = 1.0]) {
 }
 
 // --------------------------------------------------------------------- diet ----
-const _nonvegGroups = {'Eggs', 'Poultry', 'Meat', 'Fish', 'Shellfish'};
 const _glutenKeys = [
   'atta', 'wheat', 'suji', 'semolina', 'rava', 'maida', 'daliya', 'dalia',
   'vermicelli', 'seviyan', 'bread', 'pasta', 'noodle', 'barley'
@@ -150,7 +149,7 @@ Map<String, dynamic> computeTargets(Map member) {
   final kg = (member['weight_kg'] as num?)?.toDouble() ?? 65;
   final cm = (member['height_cm'] as num?)?.toDouble() ?? 165;
   final age = (member['age'] as num?)?.toInt() ?? 30;
-  final pal = (member['pal'] as num?)?.toDouble() ?? 1.4;
+  final pal = (member['pal'] as num?)?.toDouble() ?? 1.55;
   final goal = '${member['goal'] ?? 'maintain'}';
 
   final bmr = _bmr(sex, kg, cm, age);

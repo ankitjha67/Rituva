@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'engine/kb.dart';
+import 'engine/llm.dart';
 import 'engine/local_engine.dart';
 
 /// Raised only for the handful of things that genuinely cannot work without a server —
@@ -27,19 +28,23 @@ class OfflineException implements Exception {
 /// APK is usable with no backend at all.
 class RituvaApi {
   static const _prefKey = 'rituva_server_url';
+  static const _nvKeyPref = 'rituva_nvidia_key';
   // Emulator/simulator host aliases differ: the Android emulator reaches the host's
-  // localhost at 10.0.2.2, while the iOS simulator (and desktop) use localhost.
-  // A CI-baked `--dart-define=RITUVA_API=https://your-host` overrides both.
+  // Standalone by default: no server unless one is baked at build
+  // (`--dart-define=RITUVA_API=https://your-host`) or set in Profile. With no server the
+  // whole app runs on the bundled Knowledge DB + on-device engine, and the assistant talks
+  // to NVIDIA directly — nothing to connect, nothing to go wrong on launch.
   static final String _default = _resolveDefault();
-  static String _resolveDefault() {
-    const baked = String.fromEnvironment('RITUVA_API', defaultValue: '');
-    if (baked.isNotEmpty) return baked;
-    return Platform.isAndroid ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
-  }
+  static String _resolveDefault() => String.fromEnvironment('RITUVA_API', defaultValue: '');
+
+  // The NVIDIA key for the standalone LLM path (direct from the app, no server). Baked at
+  // build via `--dart-define=RITUVA_NVIDIA_KEY=...`, overridable in Profile → Assistant.
+  static const _bakedNvKey = String.fromEnvironment('RITUVA_NVIDIA_KEY', defaultValue: '');
 
   static const _timeout = Duration(seconds: 15);   // headroom for the LLM-bearing /plans call
 
   String baseUrl;
+  String nvidiaKey = _bakedNvKey;
   bool offline = false;  // true once any call has fallen back to the on-device engine
 
   /// The on-device planner. Answers every read the app makes, using the bundled
@@ -53,15 +58,21 @@ class RituvaApi {
   /// engine at a previously downloaded library if there is one.
   static Future<RituvaApi> create() async {
     var url = _default;
+    var nvKey = _bakedNvKey;
     try {
-      final saved = (await SharedPreferences.getInstance()).getString(_prefKey);
+      final p = await SharedPreferences.getInstance();
+      final saved = p.getString(_prefKey);
       if (saved != null && saved.trim().isNotEmpty) url = saved.trim();
-    } catch (_) {/* prefs unavailable → default */}
+      final nv = p.getString(_nvKeyPref);
+      if (nv != null && nv.trim().isNotEmpty) nvKey = nv.trim();
+    } catch (_) {/* prefs unavailable → defaults */}
     try {
       final dir = await getApplicationDocumentsDirectory();
       KB.downloadPath = '${dir.path}/rituva_kb_full.json';
     } catch (_) {/* no writable dir → bundled KB only */}
-    return RituvaApi._(url);
+    final api = RituvaApi._(url);
+    api.nvidiaKey = nvKey;
+    return api;
   }
 
   /// Pull the server's full Knowledge DB onto the device for offline use.
@@ -108,6 +119,114 @@ class RituvaApi {
     } catch (_) {}
   }
 
+  // ------------------------------------------------------- the assistant ----
+  /// Whether the in-app LLM assistant can run (an NVIDIA key is configured). When true,
+  /// the assistant works fully standalone — no backend server is involved.
+  bool get hasLLM => nvidiaKey.trim().isNotEmpty;
+
+  /// Persist the NVIDIA key (empty resets to the build-baked key, if any).
+  Future<void> setNvidiaKey(String key) async {
+    final v = key.trim();
+    nvidiaKey = v.isEmpty ? _bakedNvKey : v;
+    try {
+      final p = await SharedPreferences.getInstance();
+      v.isEmpty ? await p.remove(_nvKeyPref) : await p.setString(_nvKeyPref, v);
+    } catch (_) {}
+  }
+
+  static const _assistantSystem =
+      'You are Rituva, a warm, practical Indian nutrition assistant built into a meal-planning app. '
+      "You are given the user's profile, health conditions, daily nutrient targets, their whole week's "
+      'menu, and engine-computed EQUAL-NUTRIENT SWAP OPTIONS for the dishes in that menu. '
+      'Hard rules: (1) Use ONLY the numbers and dish names given in the context — never invent a '
+      'calorie or protein value, and never suggest a dish that is not listed in the menu or the swap '
+      'options. (2) When the user wants a change (a different dish for a meal, fewer calories, more '
+      'protein, etc.), name the specific day and meal, pick concrete dishes from the SWAP OPTIONS, and '
+      'show the calorie/protein difference using the given numbers. (3) Respect their conditions — '
+      'diabetes: prefer lower-calorie, higher-fibre, lower-GI choices; hypertension: lower sodium. '
+      '(4) To cut calories, compare the menu to the daily target and recommend the few highest-impact '
+      'swaps; you may also mention they can set their goal to "lose" in Edit Profile, which lowers the '
+      'daily target by about 500 kcal. Keep replies short, specific and encouraging — a sentence or two, '
+      'or a short bullet list. Never be preachy, and never output a nutrient number not in the context.';
+
+  /// The intelligent assistant. Grounded in the member's profile, health, daily targets,
+  /// the whole week's menu and engine-computed iso-nutrient alternatives for its dishes.
+  /// The LLM reasons and suggests; every number and candidate dish is supplied by the
+  /// deterministic engine, never invented by the model. Runs standalone via [NvidiaLLM].
+  Future<String> assistant(
+    String question, {
+    required Map<String, dynamic> member,
+    required Map<String, dynamic> targets,
+    required Map<String, dynamic> plan,
+    List<Map<String, String>> history = const [],
+  }) async {
+    if (!hasLLM) throw OfflineException('The assistant');
+    final ctx = await _assistantContext(member, targets, plan);
+    final convo = history.isEmpty
+        ? ''
+        : '\n\nEarlier in this chat:\n${history.map((m) => "${m['role'] == 'you' ? 'User' : 'You'}: ${m['text']}").join('\n')}';
+    final user = '$ctx$convo\n\nUser: $question';
+    // Per-model timeout. The free-tier survivor (gpt-oss-20b, a reasoning model) can take
+    // ~50s on a big prompt; retired models fail in 0.1s (HTTP 410) so they cost nothing to
+    // skip, which keeps the walk fast despite the long cap. Winner cache ⇒ one attempt next time.
+    return NvidiaLLM(nvidiaKey).chat(_assistantSystem, user, timeout: const Duration(seconds: 60));
+  }
+
+  /// Build the grounded context block: who the member is, their targets, the week's menu,
+  /// and a bounded set of engine-computed equal-nutrient swap options for its dishes.
+  Future<String> _assistantContext(
+      Map<String, dynamic> member, Map<String, dynamic> targets, Map<String, dynamic> plan) async {
+    final b = StringBuffer();
+    num tg(String k) => (targets[k] as num?) ?? 0;
+    final conds = ((member['conditions'] as List?) ?? const []).join(', ');
+    b.writeln('MEMBER: ${member['name']} · ${member['sex']} · age ${member['age']} · '
+        '${member['weight_kg']}kg / ${member['height_cm']}cm · goal ${member['goal']} · '
+        'diet ${member['diet_type']}${conds.isEmpty ? '' : ' · conditions: $conds'}.');
+    b.writeln('DAILY TARGETS: ${tg('kcal').round()} kcal, protein ${tg('protein_g').round()} g, '
+        'carb ${tg('carb_g').round()} g, fat ${tg('fat_g').round()} g, fibre ${tg('fibre_g').round()} g, '
+        'sodium <= ${tg('sodium_mg_max').round()} mg, added sugar <= ${tg('added_sugar_g_max').round()} g, '
+        'iron ${tg('iron_mg')} mg, calcium ${tg('calcium_mg').round()} mg, B12 ${tg('b12_ug')} ug.');
+
+    final days = (plan['days'] as List?) ?? const [];
+    final uniqueDishes = <String, String>{}; // recipe_id -> name
+    b.writeln('\nTHIS WEEK (date | meal | dishes | kcal | protein g):');
+    for (final d in days) {
+      final date = '${d['date']}';
+      for (final e in ((d['entries'] as List?) ?? const [])) {
+        final comps = (e['components'] as List?) ?? const [];
+        if (comps.isEmpty) continue;
+        final names = comps.map((c) => '${c['name']}').join(' + ');
+        final n = (e['nutrients'] as Map?) ?? const {};
+        b.writeln('  $date | ${e['slot']} | $names | '
+            '${(n['kcal'] as num?)?.round() ?? '?'} | ${(n['protein'] as num?)?.round() ?? '?'}');
+        for (final c in comps) {
+          final rid = '${c['recipe_id'] ?? ''}';
+          if (rid.isNotEmpty) uniqueDishes.putIfAbsent(rid, () => '${c['name']}');
+        }
+      }
+    }
+
+    final anchorDay = days.isNotEmpty ? '${days.first['date']}' : '';
+    final mid = '${member['id']}';
+    b.writeln('\nSWAP OPTIONS (engine-computed equal-nutrient alternatives — suggest ONLY these):');
+    var budget = 6; // bound the on-device work + context size (keeps the prompt small/fast)
+    for (final entry in uniqueDishes.entries) {
+      if (budget-- <= 0) break;
+      try {
+        final res = await alternatives(mid, entry.key, anchorDay);
+        final alts = (res['alternatives'] as List?) ?? const [];
+        if (alts.isEmpty) continue;
+        final line = alts.take(3).map((a) {
+          final an = (a['nutrients'] as Map?) ?? const {};
+          return '${a['name']} (${(an['kcal'] as num?)?.round() ?? '?'} kcal, '
+              '${(an['protein'] as num?)?.round() ?? '?'} g protein)';
+        }).join('; ');
+        b.writeln('  instead of ${entry.value}: $line');
+      } catch (_) {/* no alternatives for this dish → skip */}
+    }
+    return b.toString();
+  }
+
   // ---------------------------------------------------------------- HTTP ----
   Uri _u(String path, [Map<String, dynamic>? q]) => Uri.parse('$baseUrl$path')
       .replace(queryParameters: q?.map((k, v) => MapEntry(k, '$v')));
@@ -145,9 +264,18 @@ class RituvaApi {
   // validates, swaps and costs out groceries from the Knowledge DB on the phone, so
   // "offline" means "computed here", not "degraded".
 
+  /// Whether an optional backend server is configured. When false, the app is fully
+  /// standalone — every read is computed on-device and nothing probes the network.
+  bool get hasServer => baseUrl.trim().isNotEmpty;
+
   /// Fast reachability probe — sets [offline] so subsequent calls go straight to the
-  /// local engine instead of each waiting out the full timeout.
+  /// local engine instead of each waiting out the full timeout. With no server
+  /// configured there is nothing to probe, so this returns immediately.
   Future<bool> reachable() async {
+    if (!hasServer) {
+      offline = true;
+      return false;
+    }
     try {
       final r = await http.get(_u('/health')).timeout(const Duration(seconds: 3));
       offline = r.statusCode >= 400;
@@ -161,7 +289,7 @@ class RituvaApi {
   /// Run everything on-device even when a server is reachable.
   bool preferOffline = false;
 
-  bool get _useLocal => offline || preferOffline;
+  bool get _useLocal => offline || preferOffline || !hasServer;
 
   Future<T> _tryServer<T>(Future<T> Function() remote, Future<T> Function() fallback) async {
     if (_useLocal) return fallback();

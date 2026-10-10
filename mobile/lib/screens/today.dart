@@ -275,6 +275,7 @@ class TodayScreen extends StatelessWidget {
 
   Widget _mealCard(BuildContext context, Map e) {
     final comps = e['components'] as List;
+    if (comps.isEmpty) return const SizedBox.shrink();
     final names = comps.map((c) => c['name']).join(' + ');
     final slot = e['slot'] as String;
     final main = (slot == 'lunch' || slot == 'dinner') && comps.length > 1 ? comps[1] : comps.first;

@@ -63,9 +63,11 @@ class _HomeShellState extends State<HomeShell> {
       targets = t['targets'] as Map<String, dynamic>;
       anthro = t['anthropometry'] as Map<String, dynamic>;
       plan = await a.createPlan(memberId, days: 7, start: ctx!['today'] as String, variant: variant);
-      final days = plan!['days'] as List;
-      day = days.firstWhere((d) => d['date'] == ctx!['today'], orElse: () => days.first)
-          as Map<String, dynamic>;
+      // .cast is load-bearing: the on-device engine returns a typed List<Map>, and a loose
+      // `orElse: () => days.first` (dynamic) then fails firstWhere's runtime type check.
+      final days = (plan!['days'] as List).cast<Map<String, dynamic>>();
+      if (days.isEmpty) throw StateError('plan returned no days');
+      day = days.firstWhere((d) => d['date'] == ctx!['today'], orElse: () => days.first);
       offline = a.offline;
     } catch (e) {
       error = '$e';
@@ -91,9 +93,9 @@ class _HomeShellState extends State<HomeShell> {
     variant++;
     try {
       final fresh = await a.createPlan(memberId, days: 7, start: ctx!['today'] as String, variant: variant);
-      final days = fresh['days'] as List;
+      final days = (fresh['days'] as List).cast<Map<String, dynamic>>();
       plan = fresh;
-      day = days.firstWhere((d) => d['date'] == ctx!['today'], orElse: () => days.first) as Map<String, dynamic>;
+      day = days.firstWhere((d) => d['date'] == ctx!['today'], orElse: () => days.first);
       offline = a.offline;
       if (mounted) _snack('Fresh menu ready — a new mix of dishes for the week.');
     } catch (e) {
@@ -107,8 +109,10 @@ class _HomeShellState extends State<HomeShell> {
     ..showSnackBar(SnackBar(content: Text(s), behavior: SnackBarBehavior.floating));
 
   void _openChat() {
-    if (offline || plan == null || day == null) {
-      _snack('Connect a server (Profile → Server) to chat about your meals.');
+    final a = api;
+    if (a == null || plan == null || member == null || targets == null) return;
+    if (!a.hasLLM) {
+      _snack('Add your NVIDIA key in Profile → Assistant to chat.');
       return;
     }
     showModalBottomSheet(
@@ -117,10 +121,11 @@ class _HomeShellState extends State<HomeShell> {
       isScrollControlled: true,
       useSafeArea: true,
       builder: (_) => MealChatSheet(
-        api: api!,
+        api: a,
         memberId: memberId,
-        planId: plan!['plan_id'] as String,
-        date: day!['date'] as String,
+        member: member!,
+        targets: targets!,
+        plan: plan!,
       ),
     );
   }
@@ -203,7 +208,9 @@ class _HomeShellState extends State<HomeShell> {
       body: Column(
         children: [
           if (busy) const LinearProgressIndicator(minHeight: 2, color: R.gold, backgroundColor: R.line),
-          if (offline) _OfflineBanner(onTap: () => setState(() => index = 5)),
+          // Only nudge about a server when one is actually configured but unreachable.
+          // With no server (standalone) the on-device engine is the whole app, not a fallback.
+          if (offline && a.hasServer) _OfflineBanner(onTap: () => setState(() => index = 5)),
           Expanded(child: IndexedStack(index: index, children: screens)),
         ],
       ),
@@ -289,25 +296,40 @@ class _ErrorScreenState extends State<_ErrorScreen> {
                 children: [
                   const Icon(Icons.error_outline, color: R.gold, size: 40),
                   const SizedBox(height: 12),
-                  const Text('Server error', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                  const Text("Couldn't load", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
                   const SizedBox(height: 8),
                   Text(widget.error, textAlign: TextAlign.center, style: const TextStyle(color: R.muted, fontSize: 12)),
                   const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: widget.onRetry,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Try again'),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  const Divider(color: R.line),
+                  const SizedBox(height: 8),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Using a Rituva server? (optional)',
+                        style: TextStyle(color: R.muted, fontSize: 11, letterSpacing: .5)),
+                  ),
+                  const SizedBox(height: 8),
                   TextField(
                     controller: ctrl,
                     decoration: const InputDecoration(labelText: 'Server URL', hintText: 'http://192.168.1.5:8000'),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
-                    child: FilledButton.icon(
+                    child: OutlinedButton.icon(
                       onPressed: () => widget.onSaveServer(ctrl.text),
                       icon: const Icon(Icons.sync, size: 18),
-                      label: const Text('Save & reconnect'),
+                      label: const Text('Save & connect'),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  TextButton(onPressed: widget.onRetry, child: const Text('Retry current server')),
                 ],
               ),
             ),
@@ -347,6 +369,8 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   late final TextEditingController urlCtrl = TextEditingController(text: widget.serverUrl);
+  late final TextEditingController keyCtrl = TextEditingController(text: widget.api.nvidiaKey);
+  bool _showKey = false;
   Map<String, dynamic>? lib;
   bool syncing = false;
 
@@ -366,7 +390,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     urlCtrl.dispose();
+    keyCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _saveKey() async {
+    await widget.api.setNvidiaKey(keyCtrl.text);
+    if (mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(widget.api.hasLLM ? 'Assistant key saved.' : 'Assistant key cleared.'),
+      ));
+    }
   }
 
   Future<void> _download() async {
@@ -515,8 +551,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         const SizedBox(height: 18),
-        // ---- Server URL ----
-        const Text('SERVER', style: TextStyle(color: R.muted, fontSize: 11, letterSpacing: 1.2)),
+        // ---- Assistant (NVIDIA key, standalone LLM) ----
+        const Text('ASSISTANT', style: TextStyle(color: R.muted, fontSize: 11, letterSpacing: 1.2)),
+        const SizedBox(height: 8),
+        Card(
+          color: R.surface,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Icon(widget.api.hasLLM ? Icons.auto_awesome : Icons.auto_awesome_outlined,
+                      size: 16, color: widget.api.hasLLM ? R.green : R.muted),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.api.hasLLM
+                          ? 'Assistant ready — it runs directly on NVIDIA, no server needed.'
+                          : 'Add your NVIDIA API key to enable the in-app assistant.',
+                      style: TextStyle(
+                          color: widget.api.hasLLM ? R.green : R.muted, fontSize: 12),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: keyCtrl,
+                  obscureText: !_showKey,
+                  decoration: InputDecoration(
+                    labelText: 'NVIDIA API key',
+                    hintText: 'nvapi-…',
+                    suffixIcon: IconButton(
+                      icon: Icon(_showKey ? Icons.visibility_off : Icons.visibility, size: 18),
+                      onPressed: () => setState(() => _showKey = !_showKey),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Get a free key at build.nvidia.com. Stored only on this phone — it powers the '
+                  'chat assistant. Leave blank to turn the assistant off.',
+                  style: TextStyle(color: R.muted, fontSize: 11),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _saveKey,
+                    icon: const Icon(Icons.save_outlined, size: 18),
+                    label: const Text('Save key'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
+        // ---- Server URL (optional — the app is standalone by default) ----
+        const Text('SERVER (OPTIONAL)',
+            style: TextStyle(color: R.muted, fontSize: 11, letterSpacing: 1.2)),
         const SizedBox(height: 8),
         Card(
           color: R.surface,

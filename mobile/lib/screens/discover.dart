@@ -44,10 +44,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final out = [];
     for (final d in (widget.plan['days'] as List)) {
       for (final e in (d['entries'] as List)) {
-        final kcal = (e['nutrients']?['kcal'] as num?)?.round() ?? 0;
         for (final c in (e['components'] as List)) {
           final id = '${c['recipe_id'] ?? c['name']}';
           if (seen.add(id)) {
+            final kcal = (c['nutrients']?['kcal'] as num?)?.round()
+                ?? (e['nutrients']?['kcal'] as num?)?.round() ?? 0;
             out.add({'id': id, 'name': c['name'], 'region': c['region'], 'role': '', 'kcal': kcal});
           }
         }

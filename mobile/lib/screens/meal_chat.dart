@@ -2,15 +2,25 @@ import 'package:flutter/material.dart';
 import '../api.dart';
 import '../theme.dart';
 
-/// A chat sheet to ask the LLM about today's meals (trivia / Q&A). The model is
-/// grounded in the day's DB-computed nutrients server-side; it never invents numbers.
+/// The Rituva assistant. It reasons over the member's profile, health conditions,
+/// daily targets, the whole week's menu and engine-computed equal-nutrient swap options
+/// (all assembled in [RituvaApi.assistant]), and suggests concrete, grounded changes —
+/// a different dish for a meal, how to cut calories, etc. Numbers and candidate dishes
+/// come from the deterministic engine; the model never invents them. Runs standalone.
 class MealChatSheet extends StatefulWidget {
   final RituvaApi api;
   final String memberId;
-  final String planId;
-  final String date;
-  const MealChatSheet(
-      {super.key, required this.api, required this.memberId, required this.planId, required this.date});
+  final Map<String, dynamic> member;
+  final Map<String, dynamic> targets;
+  final Map<String, dynamic> plan;
+  const MealChatSheet({
+    super.key,
+    required this.api,
+    required this.memberId,
+    required this.member,
+    required this.targets,
+    required this.plan,
+  });
   @override
   State<MealChatSheet> createState() => _MealChatSheetState();
 }
@@ -21,10 +31,10 @@ class _MealChatSheetState extends State<MealChatSheet> {
   bool sending = false;
 
   static const _suggestions = [
-    "Which meal has the most protein?",
-    "Tell me a fun fact about today's dishes",
-    "Is this good for muscle gain?",
-    "A tip to make lunch healthier?",
+    "I want something different for breakfast on Sunday",
+    "Help me cut about 300 calories this week",
+    "Which day has the most protein?",
+    "A lower-sodium swap for dinner?",
   ];
 
   @override
@@ -36,16 +46,26 @@ class _MealChatSheetState extends State<MealChatSheet> {
   Future<void> _send(String q) async {
     q = q.trim();
     if (q.isEmpty || sending) return;
+    final history = List<Map<String, String>>.from(msgs); // prior turns, before this one
     setState(() {
       msgs.add({'role': 'you', 'text': q});
       sending = true;
       ctrl.clear();
     });
     try {
-      final a = await widget.api.ask(widget.memberId, q, planId: widget.planId, date: widget.date);
+      final a = await widget.api.assistant(
+        q,
+        member: widget.member,
+        targets: widget.targets,
+        plan: widget.plan,
+        history: history,
+      );
       setState(() => msgs.add({'role': 'ai', 'text': a}));
     } catch (e) {
-      setState(() => msgs.add({'role': 'ai', 'text': '$e'}));
+      final msg = e is OfflineException
+          ? 'Add your NVIDIA key in Profile → Assistant to use the assistant.'
+          : 'The assistant is busy right now — please try again in a moment.';
+      setState(() => msgs.add({'role': 'ai', 'text': msg}));
     } finally {
       if (mounted) setState(() => sending = false);
     }
@@ -67,7 +87,7 @@ class _MealChatSheetState extends State<MealChatSheet> {
               child: Row(children: [
                 Icon(Icons.forum_outlined, color: R.gold, size: 20),
                 SizedBox(width: 8),
-                Text("Ask about today's meals",
+                Text("Ask Rituva",
                     style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
               ]),
             ),
