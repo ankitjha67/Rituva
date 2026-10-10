@@ -128,7 +128,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           _label('Diet'),
           _chips(const ['lacto_veg', 'lacto_ovo', 'vegan', 'jain', 'pescatarian', 'nonveg'], diet,
               (v) => setState(() => diet = v),
-              (v) => const {'lacto_veg': 'Lacto-veg', 'lacto_ovo': 'Ovo-veg', 'vegan': 'Vegan',
+              (v) => const {'lacto_veg': 'Lacto-veg', 'lacto_ovo': 'Lacto-ovo veg', 'vegan': 'Vegan',
                     'jain': 'Jain', 'pescatarian': 'Pescatarian', 'nonveg': 'Non-veg'}[v] ?? v),
           const SizedBox(height: 14),
           _label('Region preferences (pick any)'),

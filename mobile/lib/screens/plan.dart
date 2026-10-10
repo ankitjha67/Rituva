@@ -240,9 +240,9 @@ class PlanScreen extends StatelessWidget {
                       ...(cat['items'] as List).map((it) => Padding(
                             padding: const EdgeInsets.symmetric(vertical: 6),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text('${it['item']}'),
+                                Expanded(child: Text('${it['item']}')),
+                                const SizedBox(width: 10),
                                 Text('${it['quantity']} ${it['unit']}', style: const TextStyle(color: R.muted)),
                               ],
                             ),

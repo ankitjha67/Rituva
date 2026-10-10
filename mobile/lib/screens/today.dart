@@ -126,14 +126,19 @@ class TodayScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('${r['nutrient']}'.toUpperCase(),
                             style: const TextStyle(color: R.muted, fontSize: 11)),
-                        Text(
-                          '${r['actual']} / ${r['target']} ${r['unit'] ?? ''}'
-                          '${r['planned'] != null ? ' · plan ${r['planned']}' : ''}',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${r['actual']} / ${r['target']} ${r['unit'] ?? ''}'
+                            '${r['planned'] != null ? ' · plan ${r['planned']}' : ''}',
+                            textAlign: TextAlign.right,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                          ),
                         ),
                       ],
                     ),

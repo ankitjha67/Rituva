@@ -117,10 +117,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           ),
         ),
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 32),
-            itemCount: list.length,
-            itemBuilder: (c, i) {
+          child: list.isEmpty
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text('No dishes match these filters.',
+                        style: TextStyle(color: R.muted), textAlign: TextAlign.center),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 32),
+                  itemCount: list.length,
+                  itemBuilder: (c, i) {
               final r = list[i] as Map;
               final rg = r['region'] as String?;
               final role = '${r['role'] ?? ''}';
