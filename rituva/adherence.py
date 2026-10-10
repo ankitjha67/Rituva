@@ -15,9 +15,8 @@ from .nutrition import add, food_nutrients, recipe_breakdown, zero
 from .targets import effective_targets
 from . import store
 
-# Nutrients we currently compare against targets (NutrientTargets only has these).
-# Iron/calcium/B12 are computed for actuals, but targets are not yet encoded.
-_COMPARE = ("kcal", "protein", "carb", "fat", "fibre", "sodium")
+_COMPARE = ("kcal", "protein", "carb", "fat", "fibre", "sodium",
+            "iron", "calcium", "b12")
 
 
 def _sum_rows(rows) -> Dict[str, float]:
@@ -50,6 +49,9 @@ def _align_targets(t) -> Dict[str, float]:
         "carb": t.carb_g,
         "fibre": t.fibre_g,
         "sodium": t.sodium_mg_max,
+        "iron": t.iron_mg,
+        "calcium": t.calcium_mg,
+        "b12": t.b12_ug,
     }
 
 

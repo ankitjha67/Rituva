@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from contextlib import asynccontextmanager
 from datetime import date
 from typing import List, Optional
 
@@ -40,18 +41,13 @@ _LLM_KEY = (os.environ.get("NVIDIA_API_KEY") or os.environ.get("OPENAI_API_KEY")
             or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
             or os.environ.get("RITUVA_API_KEY", ""))
 
-app = FastAPI(title="Rituva API",
-              description="Guideline-grounded, seasonal, LLM-agnostic menu planner. "
-                          "All nutrient values are computed from the Knowledge DB, never an LLM.",
-              version=__version__)
-
 
 def _conn():
     return store.connect()
 
 
-@app.on_event("startup")
-def _seed_members():
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
     conn = _conn()
     try:
         if not store.list_members(conn):
@@ -59,6 +55,14 @@ def _seed_members():
                 store.save_member(conn, m)
     finally:
         conn.close()
+    yield
+
+
+app = FastAPI(title="Rituva API",
+              description="Guideline-grounded, seasonal, LLM-agnostic menu planner. "
+                          "All nutrient values are computed from the Knowledge DB, never an LLM.",
+              version=__version__,
+              lifespan=_lifespan)
 
 
 # ---- schemas ----
@@ -69,7 +73,7 @@ class MemberIn(BaseModel):
     age: int
     weight_kg: float
     height_cm: float
-    pal: float = 1.4
+    pal: float = 1.55
     goal: str = "maintain"
     diet_type: str = "lacto_veg"
     region_prefs: list = []
@@ -381,7 +385,9 @@ def ask(member_id: str, body: AskIn):
         raise HTTPException(404, "member not found")
     meals_ctx = ""
     if pl and pl.get("days"):
-        day = next((d for d in pl["days"] if d["date"] == body.date), pl["days"][0])
+        day = next((d for d in pl["days"] if d["date"] == body.date), None)
+        if day is None:
+            day = pl["days"][0]
         lines = []
         for e in day["entries"]:
             names = " + ".join(c["name"] for c in e["components"])

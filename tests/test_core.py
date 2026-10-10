@@ -155,6 +155,13 @@ def test_adherence_actuals_vs_targets_vs_plan():
         assert kcal_row["target"] > 0
         assert 0 < rep["score"] <= 150
 
+        # Micronutrient adherence (iron/calcium/b12) is now reported
+        nutrients_in_report = {r["nutrient"] for r in rep["per_nutrient"]}
+        for micro in ("iron", "calcium", "b12"):
+            assert micro in nutrients_in_report, f"{micro} missing from adherence report"
+            row = next(r for r in rep["per_nutrient"] if r["nutrient"] == micro)
+            assert row["target"] > 0, f"{micro} target should be positive"
+
         # Recipe expansion should decompose a known recipe into its ingredient rows
         ings = expand_recipe_items("chole", 1.0)
         assert any(i["food_id"] == "kabuli_chana" for i in ings)
