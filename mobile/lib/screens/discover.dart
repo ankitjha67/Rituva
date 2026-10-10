@@ -83,7 +83,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       child: ChoiceChip(
                         label: Text(lbl(o)),
                         selected: sel == o,
-                        selectedColor: R.gold.withOpacity(.25),
+                        selectedColor: R.gold.withValues(alpha: .25),
                         onSelected: (_) => onSel(o),
                       ),
                     ))
@@ -92,7 +92,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         );
     return Column(
       children: [
-        if (offline)
+        // Only note "offline" when a server was configured but is unreachable; in the
+        // standalone (no-server) app the on-device library is the whole point, not a fallback.
+        if (offline && widget.api.hasServer)
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
             child: Text('Offline — browsing the library stored on this phone.',
@@ -136,7 +138,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                              color: regionColor(rg).withOpacity(.2),
+                              color: regionColor(rg).withValues(alpha: .2),
                               borderRadius: BorderRadius.circular(8)),
                           child: Text(humanize(rg),
                               style: TextStyle(

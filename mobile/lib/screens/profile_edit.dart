@@ -138,7 +138,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 .map((r) => FilterChip(
                       label: Text(humanize(r)),
                       selected: regions.contains(r),
-                      selectedColor: R.gold.withOpacity(.25),
+                      selectedColor: R.gold.withValues(alpha: .25),
                       onSelected: (s) => setState(() => s ? regions.add(r) : regions.remove(r)),
                     ))
                 .toList(),
@@ -186,7 +186,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             .map((o) => ChoiceChip(
                   label: Text(lbl(o)),
                   selected: sel == o,
-                  selectedColor: R.gold.withOpacity(.25),
+                  selectedColor: R.gold.withValues(alpha: .25),
                   onSelected: (_) => onSel(o),
                 ))
             .toList(),

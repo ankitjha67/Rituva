@@ -10,6 +10,7 @@ class TodayScreen extends StatelessWidget {
   final String memberId;
   final Future<void> Function() onRegenerate;
   final bool regenerating;
+  final void Function(String slot, String declinedRecipeId, Map<String, dynamic> alternative) onApplySwap;
   const TodayScreen({
     super.key,
     required this.ctx,
@@ -20,6 +21,7 @@ class TodayScreen extends StatelessWidget {
     required this.memberId,
     required this.onRegenerate,
     required this.regenerating,
+    required this.onApplySwap,
   });
 
   @override
@@ -249,9 +251,9 @@ class TodayScreen extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(13),
           decoration: BoxDecoration(
-            color: R.gold.withOpacity(.10),
+            color: R.gold.withValues(alpha: .10),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: R.gold.withOpacity(.30)),
+            border: Border.all(color: R.gold.withValues(alpha: .30)),
           ),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Padding(
@@ -264,7 +266,10 @@ class TodayScreen extends StatelessWidget {
                 if (provider.isNotEmpty && provider != 'none')
                   Padding(
                     padding: const EdgeInsets.only(top: 5),
-                    child: Text('written by $provider · every number is from the DB',
+                    child: Text(
+                        provider == 'offline' || provider == 'on-device'
+                            ? 'every number is from the DB'
+                            : 'written by $provider · every number is from the DB',
                         style: const TextStyle(color: R.muted, fontSize: 10)),
                   ),
               ]),
@@ -297,7 +302,7 @@ class TodayScreen extends StatelessWidget {
               width: 44,
               height: 44,
               alignment: Alignment.center,
-              decoration: BoxDecoration(color: R.gold.withOpacity(.15), borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(color: R.gold.withValues(alpha: .15), borderRadius: BorderRadius.circular(12)),
               child: Text(mealEmoji(slot), style: const TextStyle(fontSize: 20)),
             ),
             const SizedBox(width: 11),
@@ -313,7 +318,7 @@ class TodayScreen extends StatelessWidget {
               tooltip: 'Swap this dish',
               visualDensity: VisualDensity.compact,
               icon: const Icon(Icons.swap_horiz, size: 19, color: R.muted),
-              onPressed: () => _swap(context, main['recipe_id'] as String),
+              onPressed: () => _swap(context, slot, main['recipe_id'] as String),
             ),
           ]),
         ),
@@ -321,7 +326,7 @@ class TodayScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _swap(BuildContext context, String recipeId) async {
+  Future<void> _swap(BuildContext context, String slot, String recipeId) async {
     showModalBottomSheet(
       context: context,
       backgroundColor: R.bg2,
@@ -355,7 +360,7 @@ class TodayScreen extends StatelessWidget {
               children: [
                 Text('Swap · ${res['declined']['name']}',
                     style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-                const Text('matched on calories & nutrients, from the DB',
+                const Text('Tap one to use it today — matched on calories & nutrients, from the DB',
                     style: TextStyle(color: R.muted, fontSize: 12)),
                 const SizedBox(height: 8),
                 ...alts.map((a) => Card(
@@ -367,7 +372,13 @@ class TodayScreen extends StatelessWidget {
                           'P${a['nutrients']['protein']} · Fib${a['nutrients']['fibre']}  (${a['delta']})',
                           style: const TextStyle(color: R.muted, fontSize: 11),
                         ),
-                        trailing: a['region'] != null ? _tag(a['region'] as String) : null,
+                        trailing: a['region'] != null
+                            ? _tag(a['region'] as String)
+                            : const Icon(Icons.add_circle_outline, color: R.gold, size: 20),
+                        onTap: () {
+                          Navigator.pop(context);
+                          onApplySwap(slot, recipeId, Map<String, dynamic>.from(a as Map));
+                        },
                       ),
                     )),
               ],
@@ -380,7 +391,7 @@ class TodayScreen extends StatelessWidget {
 
   static Widget _tag(String r) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-        decoration: BoxDecoration(color: regionColor(r).withOpacity(.2), borderRadius: BorderRadius.circular(6)),
+        decoration: BoxDecoration(color: regionColor(r).withValues(alpha: .2), borderRadius: BorderRadius.circular(6)),
         child: Text(r[0].toUpperCase(),
             style: TextStyle(color: regionColor(r), fontWeight: FontWeight.w800, fontSize: 10)),
       );

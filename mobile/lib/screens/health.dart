@@ -90,11 +90,18 @@ class _HealthScreenState extends State<HealthScreen> {
                 Text('DAILY TARGETS · ${humanize(t['source'] as String?)}',
                     style: const TextStyle(color: R.muted, fontSize: 11, letterSpacing: 1.2)),
                 const SizedBox(height: 10),
-                Row(children: [
-                  _stat('${a['bmi']}', 'BMI · ${a['bmi_category']}'),
-                  _stat('${t['kcal']}', 'kcal'),
-                  _stat('${t['protein_g']}', 'protein g'),
-                ]),
+                // IntrinsicHeight + stretch so all three boxes are the same height even when
+                // one label (e.g. "BMI · Overweight") wraps to two lines.
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _stat('${a['bmi']}', 'BMI · ${a['bmi_category']}'),
+                      _stat('${t['kcal']}', 'kcal'),
+                      _stat('${t['protein_g']}', 'protein g'),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 10),
                 Text(
                   'Sodium ≤${(t['sodium_mg_max'] as num).round()} mg · added sugar ≤${(t['added_sugar_g_max'] as num).round()} g\n'
@@ -204,9 +211,11 @@ class _HealthScreenState extends State<HealthScreen> {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: R.line),
           ),
-          child: Column(children: [
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Text(big, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-            Text(label, textAlign: TextAlign.center, style: const TextStyle(color: R.muted, fontSize: 9)),
+            const SizedBox(height: 2),
+            Text(label,
+                textAlign: TextAlign.center, maxLines: 2, style: const TextStyle(color: R.muted, fontSize: 9.5)),
           ]),
         ),
       );

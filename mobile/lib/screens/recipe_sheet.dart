@@ -159,9 +159,9 @@ class _RecipeSheetState extends State<RecipeSheet> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: R.gold.withOpacity(.09),
+                  color: R.gold.withValues(alpha: .09),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: R.gold.withOpacity(.28)),
+                  border: Border.all(color: R.gold.withValues(alpha: .28)),
                 ),
                 child: Text('${m['intro']}',
                     style: const TextStyle(fontSize: 13, height: 1.4, fontStyle: FontStyle.italic)),
@@ -244,7 +244,7 @@ class _RecipeSheetState extends State<RecipeSheet> {
             height: 24,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: R.gold.withOpacity(.16),
+              color: R.gold.withValues(alpha: .16),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text('$n',
@@ -276,7 +276,7 @@ class _RecipeSheetState extends State<RecipeSheet> {
               height: 38,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: R.magenta.withOpacity(.16),
+                color: R.magenta.withValues(alpha: .16),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(isVideo ? Icons.play_arrow : Icons.search, color: R.magenta, size: 20),
@@ -335,7 +335,7 @@ class _RecipeSheetState extends State<RecipeSheet> {
 
   Widget _pill(String s, Color c) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-        decoration: BoxDecoration(color: c.withOpacity(.18), borderRadius: BorderRadius.circular(8)),
+        decoration: BoxDecoration(color: c.withValues(alpha: .18), borderRadius: BorderRadius.circular(8)),
         child: Text(s, style: TextStyle(color: c, fontWeight: FontWeight.w700, fontSize: 10.5)),
       );
 

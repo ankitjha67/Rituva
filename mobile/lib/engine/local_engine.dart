@@ -195,7 +195,7 @@ class LocalEngine {
         }
       }
     }
-    return 'Planned offline for $name: $avgKcal kcal and ${avgProt}g protein a day on '
+    return 'Planned on your phone for $name: $avgKcal kcal and ${avgProt}g protein a day on '
         'average, $onTarget of ${days.length} days inside the energy window, and '
         '${dishes.length} different dishes across the week so nothing gets repetitive.';
   }
@@ -284,23 +284,25 @@ class LocalEngine {
         .toList()
       ..sort((a, b) => dist(a.value).compareTo(dist(b.value)));
 
-    return {
-      'declined': {'name': target.name},
-      'alternatives': [
-        for (final e in pool.take(3))
-          {
-            'id': e.key.id,
-            'name': e.key.name,
-            'region': e.key.region,
-            'nutrients': {
-              'kcal': (e.value['kcal'] ?? 0).round(),
-              'protein': double.parse((e.value['protein'] ?? 0).toStringAsFixed(1)),
-              'fibre': double.parse((e.value['fibre'] ?? 0).toStringAsFixed(1)),
-            },
-            'delta': _delta(e.value, orig),
-          }
-      ],
-    };
+    // Full shape, matching the server's /alternatives: recipe_id + all nutrients + the
+    // ingredient BOM, so a tap-to-swap can replace the dish and recompute totals/grocery.
+    final out = <Map<String, dynamic>>[];
+    for (final e in pool.take(3)) {
+      final comp = makeComponent(k, e.key);
+      out.add({
+        'recipe_id': e.key.id,
+        'id': e.key.id,
+        'name': e.key.name,
+        'region': e.key.region,
+        'nutrients': {
+          for (final kk in comp.nutrients.keys)
+            kk: double.parse((comp.nutrients[kk] ?? 0).toStringAsFixed(1))
+        },
+        'ingredients': comp.ingredients,
+        'delta': _delta(e.value, orig),
+      });
+    }
+    return {'declined': {'name': target.name}, 'alternatives': out};
   }
 
   String _delta(Map<String, double> alt, Map<String, double> orig) {

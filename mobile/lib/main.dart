@@ -31,6 +31,7 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   RituvaApi? api;
   int index = 0;
+  int _insVisit = 0; // bumps when Analytics is opened, so its charts re-animate each visit
   bool loading = true;   // full-screen: first load & member switch
   bool busy = false;     // inline: regenerate — keeps the UI mounted
   bool offline = false;
@@ -108,6 +109,52 @@ class _HomeShellState extends State<HomeShell> {
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(s), behavior: SnackBarBehavior.floating));
 
+  /// Apply an iso-nutrient swap to today's menu: replace the declined dish in its meal
+  /// with the chosen alternative, then recompute the meal's and the day's totals from the
+  /// DB numbers the engine already attached. `day` is the same object the plan holds, so
+  /// Plan / Analytics / Grocery all reflect the swap too.
+  void _applySwap(String slot, String declinedId, Map<String, dynamic> alt) {
+    final d = day;
+    if (d == null) return;
+    const keys = ['kcal', 'protein', 'carb', 'fat', 'fibre', 'iron', 'calcium', 'b12', 'sodium'];
+    Map<String, dynamic> sum(Iterable<Map> maps) {
+      final out = <String, dynamic>{for (final k in keys) k: 0.0};
+      for (final n in maps) {
+        for (final k in keys) {
+          out[k] = (out[k] as double) + ((n[k] as num?)?.toDouble() ?? 0);
+        }
+      }
+      return out;
+    }
+
+    var applied = false;
+    for (final e in (d['entries'] as List)) {
+      if (e['slot'] != slot) continue;
+      final comps = e['components'] as List;
+      for (var i = 0; i < comps.length; i++) {
+        if ('${comps[i]['recipe_id']}' == declinedId) {
+          comps[i] = {
+            'recipe_id': alt['recipe_id'],
+            'name': alt['name'],
+            'region': alt['region'],
+            'nutrients': alt['nutrients'],
+            'ingredients': alt['ingredients'] ?? const [],
+          };
+          applied = true;
+          break;
+        }
+      }
+      if (applied) {
+        e['nutrients'] = sum((comps).map((c) => (c['nutrients'] as Map?) ?? const {}));
+        break;
+      }
+    }
+    if (!applied) return;
+    d['totals'] = sum((d['entries'] as List).map((e) => (e['nutrients'] as Map?) ?? const {}));
+    setState(() {});
+    _snack('Swapped in ${alt['name']} for today.');
+  }
+
   void _openChat() {
     final a = api;
     if (a == null || plan == null || member == null || targets == null) return;
@@ -153,10 +200,16 @@ class _HomeShellState extends State<HomeShell> {
           api: a,
           memberId: memberId,
           onRegenerate: _regenerate,
-          regenerating: busy),
+          regenerating: busy,
+          onApplySwap: _applySwap),
       PlanScreen(plan: plan!, ctx: ctx!, api: a, onRegenerate: _regenerate, regenerating: busy),
       DiscoverScreen(api: a, plan: plan!),
-      InsightsScreen(plan: plan!, targets: targets!, anthro: anthro!, ctx: ctx!),
+      InsightsScreen(
+          key: ValueKey('insights-$_insVisit'),
+          plan: plan!,
+          targets: targets!,
+          anthro: anthro!,
+          ctx: ctx!),
       HealthScreen(member: member!, targets: targets!, anthro: anthro!, api: a, memberId: memberId, onChanged: _load),
       ProfileScreen(
         api: a,
@@ -218,7 +271,10 @@ class _HomeShellState extends State<HomeShell> {
         backgroundColor: R.bg2,
         selectedIndex: index,
         labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-        onDestinationSelected: (i) => setState(() => index = i),
+        onDestinationSelected: (i) => setState(() {
+          if (i == 3 && index != 3) _insVisit++; // re-mount Analytics so its charts animate in
+          index = i;
+        }),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Today'),
           NavigationDestination(icon: Icon(Icons.calendar_month_outlined), label: 'Plan'),
@@ -239,7 +295,7 @@ class _OfflineBanner extends StatelessWidget {
   const _OfflineBanner({required this.onTap});
   @override
   Widget build(BuildContext context) => Material(
-        color: R.gold.withOpacity(.14),
+        color: R.gold.withValues(alpha: .14),
         child: InkWell(
           onTap: onTap,
           child: Padding(
@@ -451,7 +507,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               .map<Widget>((m) => ChoiceChip(
                     label: Text('${m['name']}'),
                     selected: m['id'] == widget.memberId,
-                    selectedColor: R.gold.withOpacity(.25),
+                    selectedColor: R.gold.withValues(alpha: .25),
                     onSelected: (_) => widget.onSwitch(m['id'] as String),
                   ))
               .toList(),

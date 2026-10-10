@@ -280,9 +280,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
   Widget _dayChip(String label, Map day, Color c) => Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: c.withOpacity(.10),
+          color: c.withValues(alpha: .10),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: c.withOpacity(.35)),
+          border: Border.all(color: c.withValues(alpha: .35)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -416,7 +416,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
   Widget _dqsPill(int dqs) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: (dqs >= 80 ? R.green : R.gold).withOpacity(.16),
+          color: (dqs >= 80 ? R.green : R.gold).withValues(alpha: .16),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text('DQS $dqs',
@@ -444,11 +444,16 @@ class _InsightsScreenState extends State<InsightsScreen> {
           const SizedBox(height: 4),
           ClipRRect(
             borderRadius: BorderRadius.circular(9),
-            child: LinearProgressIndicator(
-              value: ratio.clamp(0.0, 1.0),
-              minHeight: 7,
-              backgroundColor: R.line,
-              color: c,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: ratio.clamp(0.0, 1.0)),
+              duration: const Duration(milliseconds: 800),
+              curve: Curves.easeOutCubic,
+              builder: (_, v, __) => LinearProgressIndicator(
+                value: v,
+                minHeight: 7,
+                backgroundColor: R.line,
+                color: c,
+              ),
             ),
           ),
         ],
@@ -468,8 +473,13 @@ class _InsightsScreenState extends State<InsightsScreen> {
             const SizedBox(height: 4),
             ClipRRect(
               borderRadius: BorderRadius.circular(9),
-              child: LinearProgressIndicator(
-                  value: frac.clamp(0.0, 1.0), minHeight: 7, backgroundColor: R.line, color: c),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: frac.clamp(0.0, 1.0)),
+                duration: const Duration(milliseconds: 800),
+                curve: Curves.easeOutCubic,
+                builder: (_, v, __) => LinearProgressIndicator(
+                    value: v, minHeight: 7, backgroundColor: R.line, color: c),
+              ),
             ),
           ],
         ),
@@ -518,8 +528,11 @@ class _RingGauge extends StatelessWidget {
         SizedBox(
           width: 92,
           height: 92,
-          child: CustomPaint(
-            painter: _RingPainter(pct.toDouble(), color),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: pct.toDouble()),
+            duration: const Duration(milliseconds: 850),
+            curve: Curves.easeOutCubic,
+            builder: (_, v, child) => CustomPaint(painter: _RingPainter(v, color), child: child),
             child: Center(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 Text('${value.round()}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
@@ -571,8 +584,11 @@ class _Donut extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
         width: size,
         height: size,
-        child: CustomPaint(
-          painter: _DonutPainter(segments),
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          duration: const Duration(milliseconds: 850),
+          curve: Curves.easeOutCubic,
+          builder: (_, v, child) => CustomPaint(painter: _DonutPainter(segments, progress: v), child: child),
           child: Center(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Text(centerTop, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
@@ -585,7 +601,8 @@ class _Donut extends StatelessWidget {
 
 class _DonutPainter extends CustomPainter {
   final List<_Seg> segments;
-  _DonutPainter(this.segments);
+  final double progress; // 0..1 entrance sweep
+  _DonutPainter(this.segments, {this.progress = 1.0});
   @override
   void paint(Canvas canvas, Size size) {
     final c = size.center(Offset.zero);
@@ -599,11 +616,12 @@ class _DonutPainter extends CustomPainter {
     var start = -math.pi / 2;
     const gap = 0.04;
     for (final s in segments) {
-      final sweep = 2 * math.pi * (s.value / total) - gap;
+      final full = 2 * math.pi * (s.value / total) * progress;
+      final sweep = full - gap;
       canvas.drawArc(
         rect,
         start,
-        sweep,
+        sweep > 0 ? sweep : 0,
         false,
         Paint()
           ..style = PaintingStyle.stroke
@@ -611,12 +629,22 @@ class _DonutPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round
           ..color = s.color,
       );
-      start += 2 * math.pi * (s.value / total);
+      start += full;
     }
   }
 
   @override
-  bool shouldRepaint(_DonutPainter old) => true;
+  bool shouldRepaint(_DonutPainter old) {
+    if (old.progress != progress) return true;
+    if (old.segments.length != segments.length) return true;
+    for (var i = 0; i < segments.length; i++) {
+      if (old.segments[i].value != segments[i].value ||
+          old.segments[i].color != segments[i].color) {
+        return true;
+      }
+    }
+    return false;
+  }
 }
 
 /// A single horizontal 100%-width stacked bar (meal calorie split).
@@ -679,13 +707,18 @@ class _TrendBars extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    Text(values[i].round().toString(), style: const TextStyle(fontSize: 8.5, color: R.muted)),
+                    Text(values[i].round().toString(), style: const TextStyle(fontSize: 9, color: R.muted)),
                     const SizedBox(height: 2),
-                    Container(
-                      height: (maxV <= 0 ? 0.0 : values[i] / maxV * 92).clamp(3.0, 92.0),
-                      decoration: BoxDecoration(
-                        color: _color(values[i]),
-                        borderRadius: BorderRadius.circular(4),
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: 1),
+                      duration: const Duration(milliseconds: 750),
+                      curve: Curves.easeOutCubic,
+                      builder: (_, g, __) => Container(
+                        height: (maxV <= 0 ? 0.0 : values[i] / maxV * 92).clamp(3.0, 92.0) * g,
+                        decoration: BoxDecoration(
+                          color: _color(values[i]),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 4),

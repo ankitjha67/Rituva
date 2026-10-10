@@ -107,7 +107,7 @@ class _ReferenceScreenState extends State<ReferenceScreen> {
                 child: ChoiceChip(
                   label: Text(f),
                   selected: filter == f,
-                  selectedColor: R.gold.withOpacity(.25),
+                  selectedColor: R.gold.withValues(alpha: .25),
                   onSelected: (_) => setState(() => filter = f),
                 ),
               ),
@@ -125,9 +125,9 @@ class _ReferenceScreenState extends State<ReferenceScreen> {
   Widget _matchedCard(Map m) => Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: R.gold.withOpacity(.10),
+          color: R.gold.withValues(alpha: .10),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: R.gold.withOpacity(.35)),
+          border: Border.all(color: R.gold.withValues(alpha: .35)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -161,9 +161,9 @@ class _ReferenceScreenState extends State<ReferenceScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: R.violet.withOpacity(.10),
+        color: R.violet.withValues(alpha: .10),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: R.violet.withOpacity(.35)),
+        border: Border.all(color: R.violet.withValues(alpha: .35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -244,7 +244,7 @@ class _ReferenceScreenState extends State<ReferenceScreen> {
         decoration: BoxDecoration(
           color: R.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isMatch ? R.gold.withOpacity(.5) : R.line),
+          border: Border.all(color: isMatch ? R.gold.withValues(alpha: .5) : R.line),
         ),
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -322,7 +322,7 @@ class _ReferenceScreenState extends State<ReferenceScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: (fromGuidelines ? R.teal : R.violet).withOpacity(.16),
+                  color: (fromGuidelines ? R.teal : R.violet).withValues(alpha: .16),
                   borderRadius: BorderRadius.circular(7),
                 ),
                 child: Text(fromGuidelines ? 'NIN guidelines' : 'clinical',

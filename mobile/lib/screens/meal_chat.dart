@@ -43,6 +43,18 @@ class _MealChatSheetState extends State<MealChatSheet> {
     super.dispose();
   }
 
+  ScrollController? _sc;
+
+  void _scrollToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final sc = _sc;
+      if (sc != null && sc.hasClients) {
+        sc.animateTo(sc.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+      }
+    });
+  }
+
   Future<void> _send(String q) async {
     q = q.trim();
     if (q.isEmpty || sending) return;
@@ -52,6 +64,7 @@ class _MealChatSheetState extends State<MealChatSheet> {
       sending = true;
       ctrl.clear();
     });
+    _scrollToEnd();
     try {
       final a = await widget.api.assistant(
         q,
@@ -68,6 +81,7 @@ class _MealChatSheetState extends State<MealChatSheet> {
       setState(() => msgs.add({'role': 'ai', 'text': msg}));
     } finally {
       if (mounted) setState(() => sending = false);
+      _scrollToEnd();
     }
   }
 
@@ -80,7 +94,9 @@ class _MealChatSheetState extends State<MealChatSheet> {
         maxChildSize: .95,
         minChildSize: .5,
         expand: false,
-        builder: (c, sc) => Column(
+        builder: (c, sc) {
+          _sc = sc;
+          return Column(
           children: [
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
@@ -137,7 +153,8 @@ class _MealChatSheetState extends State<MealChatSheet> {
               ),
             ),
           ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -151,7 +168,7 @@ class _MealChatSheetState extends State<MealChatSheet> {
         padding: const EdgeInsets.all(11),
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * .8),
         decoration: BoxDecoration(
-          color: you ? R.gold.withOpacity(.18) : R.surface,
+          color: you ? R.gold.withValues(alpha: .18) : R.surface,
           borderRadius: BorderRadius.circular(14),
           border: you ? null : Border.all(color: R.line),
         ),

@@ -22,7 +22,6 @@ class PlanScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final days = plan['days'] as List;
     final summary = plan['summary'] as Map;
-    final isDemo = '${plan['plan_id']}'.startsWith('demo');
     return ListView(
       padding: kScreenPad,
       children: [
@@ -39,7 +38,8 @@ class PlanScreen extends StatelessWidget {
                 ],
               ),
             ),
-            if (!isDemo)
+            // Export is served by the backend; only offer it when a server is connected.
+            if (api.hasServer)
               PopupMenuButton<String>(
                 icon: const Icon(Icons.download_outlined),
                 tooltip: 'Export',
@@ -158,7 +158,7 @@ class PlanScreen extends StatelessWidget {
             width: 44,
             height: 44,
             alignment: Alignment.center,
-            decoration: BoxDecoration(color: R.gold.withOpacity(.15), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: R.gold.withValues(alpha: .15), borderRadius: BorderRadius.circular(12)),
             child: Text(mealEmoji(slot), style: const TextStyle(fontSize: 20)),
           ),
           const SizedBox(width: 11),
@@ -173,7 +173,7 @@ class PlanScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
-                  color: regionColor(region).withOpacity(.2), borderRadius: BorderRadius.circular(6)),
+                  color: regionColor(region).withValues(alpha: .2), borderRadius: BorderRadius.circular(6)),
               child: Text(region[0].toUpperCase(),
                   style: TextStyle(color: regionColor(region), fontWeight: FontWeight.w800, fontSize: 10)),
             ),
