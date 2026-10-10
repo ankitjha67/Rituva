@@ -304,6 +304,21 @@ class DeterministicPlanner:
                 break
             ms = min(2.0, ms + 0.3)
             packed = assemble(ms)
+
+        # Energy rescue. A high-energy / low-protein target (e.g. an active adult at
+        # maintenance) leaves the mains small and pushes grain scaling to its cap, so the day
+        # lands under the energy window. Grow the mains further so the extra calories come
+        # from balanced dishes rather than yet more grain. This only runs when the day is
+        # *under* target, so days already in tolerance — including the seed members the tests
+        # pin — never enter the loop and stay byte-identical.
+        def _day_kcal(pk):
+            return (sum(c.nutrients["kcal"] for c in (pk[0], pk[1], pk[2], pk[3], pk[4], pk[6], pk[7]))
+                    + sum(c.nutrients["kcal"] for c in pk[5]))
+        floor = targets.kcal * (1 - KCAL_TOLERANCE)
+        while _day_kcal(packed) < floor and ms < 3.2:
+            ms = min(3.2, round(ms + 0.3, 2))
+            packed = assemble(ms)
+
         bf_c, lm, lv, dm, dv, sn, lg, dg, _ = packed
 
         empty = MealEntry(MealSlot.SNACK2, [], zero())

@@ -472,6 +472,40 @@ Map<String, dynamic> _oneDay(
     ms = math.min(2.0, ms + 0.3);
   }
 
+  // Energy rescue (mirrors planner.py): a high-energy / low-protein target leaves the mains
+  // small and pins grain scaling to its cap, so the day lands under the energy window. Grow
+  // the mains further so the extra calories come from balanced dishes, not just more grain.
+  // Only runs when under target, so days already in tolerance stay unchanged.
+  double dayKcal() {
+    var k = 0.0;
+    for (final c in [bfC, lMainC, lVegC, dMainC, dVegC, lg, dg]) {
+      if (c != null) k += c.nutrients['kcal'] ?? 0;
+    }
+    for (final c in snackC) {
+      k += c.nutrients['kcal'] ?? 0;
+    }
+    return k;
+  }
+
+  final kcalFloor = targetKcal * (1 - _kcalTolerance);
+  while (dayKcal() < kcalFloor && ms < 3.2) {
+    ms = math.min(3.2, ms + 0.3);
+    bfC = bf == null ? null : makeComponent(kb, bf);
+    lMainC = lMain == null ? null : makeComponent(kb, lMain, ms);
+    lVegC = lVeg == null ? null : makeComponent(kb, lVeg);
+    dMainC = dMain == null ? null : makeComponent(kb, dMain, ms);
+    dVegC = dVeg == null ? null : makeComponent(kb, dVeg);
+    snackC = snacks.map((s) => makeComponent(kb, s)).toList();
+    final fixed = <Component>[
+      if (bfC != null) bfC, if (lMainC != null) lMainC, if (lVegC != null) lVegC,
+      if (dMainC != null) dMainC, if (dVegC != null) dVegC, ...snackC,
+    ];
+    final fixedKcal = fixed.fold<double>(0, (a, c) => a + (c.nutrients['kcal'] ?? 0));
+    final grainKcal = math.max(targetKcal - fixedKcal, 250.0);
+    lg = _grainComponent(kb, lunchGrain, grainKcal / 2);
+    dg = _grainComponent(kb, dinnerGrain, grainKcal / 2);
+  }
+
   Map<String, dynamic> entry(String slot, List<Component> comps) {
     var n = zeroNutrients();
     for (final c in comps) {
