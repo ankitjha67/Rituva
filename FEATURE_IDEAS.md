@@ -216,7 +216,149 @@ changes ("different Sunday breakfast" → real alternative + exact kcal/protein 
 
 ---
 
-## 12. Suggested build order (maps to PRD §19)
+## 12. Advanced diet-quality indices & adequacy scores — **net-new analytics depth**
+
+*(deep-research provenance: two OSINT passes verified against authoritative sources — see §13 for the data-source twin.)*
+
+**The single unlock:** IFCT 2017 *already* carries vit A/C/E, folate, K, Mg, Zn, fatty-acid profiles, amino acids
+(incl. **leucine**) and phytate/oxalate columns. One extraction job (pull those extra columns into `ifct_local.py`)
+turns on most indices below **at once**. Numbers stay engine-computed — reuse the existing NAR/adequacy machinery; the
+LLM only narrates.
+
+**Ship-now (no new composition data needed):**
+- **MDD-W / MDD-C** dietary diversity (FAO 2021 / WHO-UNICEF 2021) — count distinct food groups/day, ≥5 = adequate.
+  Maps **directly onto the existing IFCT A–S groups**. 10-dot waffle + weekly groups-hit line. **[S]**
+- **NAR / MAR** (Madden & Yoder 1972) — per-nutrient `min(intake/RDA,1)`; MAR = mean of NARs. **MAR gauge shipped this
+  session** (§14); add the per-nutrient NAR bars. **[S]**
+- **Protein distribution / leucine threshold** (Mamerow 2014; Moore 2015) — per-meal protein vs ~0.4 g/kg (~25–30 g,
+  ~2.5–3 g leucine); evenness = CV across the 5 slots. Small-multiples bars with a threshold line. **[S/M]**
+- **Weight trajectory** — **NIH Body Weight Planner / Hall dynamic model** (*Lancet* 2011), explicitly **not** the
+  discredited 3500-kcal rule. Projects weight from cumulative energy balance (planned kcal − TDEE). Line + projection
+  band + "hit X by date" marker. **[M]**
+- **Deficiency-risk score** (ICMR-NIN; lacto-veg B12/Fe literature) — `f(mean NAR, variance, trend)` + diet-type flag.
+  Traffic-light tiles. Naturally surfaces the B12 gap the heatmap already shows. **[M]**
+- **RDA benchmarking** vs **ICMR-NIN 2020** — %RDA per nutrient (already core to the engine). **[S]**
+
+**Gated on the one IFCT-column extraction (then all unlock together):**
+- **HEI-2020** (USDA/NCI) — 13 components scored as **density per 1000 kcal**, 100-pt (9 adequacy + 4 moderation). **[M]**
+- **AHEI-2010** (Chiuve 2012) — 11 components × 0–10 = 110. **[M]**
+- **NRF9.3** (Drewnowski 2010) — 9 encourage − 3 limit, per 100 kcal → a **"best foods" leaderboard**. **[M]**
+- **PHDI** planetary-health diet index (Cacau 2021; **EAT-Lancet 2019** reference) — each food group's grams vs
+  EAT-Lancet targets. Diverging bar. **[M]**
+- **DII** dietary inflammatory index (Shivappa 2014) — 45 params z-scored → centred percentile → × inflammatory score.
+  Diverging bar (pro↔anti-inflammatory). ⚠️ **needs the published global reference-mean table — a data-sourcing
+  decision to surface to the user.** **[L]**
+- **Food synergy / antagonism** (Hallberg; FAO/WHO 2004) — per-meal **iron × vit-C** enhancer; **Ca / tea / coffee ↔
+  non-heme Fe** and **phytate:mineral molar-ratio** inhibitors; fat-soluble vits need dietary fat. Pairing chips +
+  warning badges, narrated ("dal + lemon → better iron uptake"). **[M]**
+
+**External reference tables (the two items that most need a sourcing decision):**
+- **Glycemic Load** needs a GI table (Intl Tables 2021 / Sydney; curate Indian staples) — `GL = GI × avail-carb/100`.
+  (Already flagged in §10.) **[L]**
+- **Sustainability footprint** — **Poore & Nemecek 2018 (*Science*)** via OWID (kg CO₂e, L water, m² land per food) →
+  stacked bar/meal, weekly treemap, and a **gauge vs the EAT-Lancet per-capita boundary**. Extends §5. **[M]**
+- **NFHS-5 population benchmarking** (IIPS 2019–21) — "you vs a typical Indian adult" percentile band. Needs NFHS
+  reference distributions. **[L]**
+- **Glycemic variability** (CV ≤36% target, ADA 2023; MAGE/CONGA) — **hardware-gated on CGM** (see §13). **[L]**
+- *Flag: **ANDI** (Fuhrman) is commercial & not peer-reviewed — cite with that caveat or skip.*
+
+---
+
+## 13. Novel data sources & quantified-self signals — **out-of-the-box, offline-first**
+
+**Cross-cutting rule (unchanged):** every signal only **reweights targets, emphasis and insights** — the Knowledge DB
+still owns every gram/mg. Cloud signals are fetched-when-online, cached-with-timestamp, and degrade gracefully;
+on-device sources need no network at all.
+
+**On-device & free — via Android Health Connect (local DB, no cloud):**
+- **Steps / active-calories → dynamic TDEE** (`StepsRecord`, `*CaloriesBurned`) — replaces the static activity factor in
+  the energy target. **The single highest-ROI integration for the existing planner.** **[M]**
+- **Body composition** (`Weight`, `BodyFat`, `LeanBodyMass`, `BasalMetabolicRate`) — lean-mass trend →
+  protein-per-kg-lean target + recomposition chart. **[M]**
+- **Blood pressure** (`BloodPressureRecord`) → DASH-style sodium↓ / potassium↑ emphasis, flags high-sodium dishes;
+  slots into the condition-aware profiles. **[M]**
+- **Sleep / HRV / resting-HR** (`SleepSessionRecord`, `HeartRateVariabilityRmssdRecord`, `RestingHeartRateRecord`) —
+  correlate late/heavy dinners vs sleep quality & morning HRV; **recovery-aware targets** (low-HRV day → magnesium/
+  tryptophan dinners, tighter caffeine cutoff). A diet→sleep scatter is genuinely new for a meal planner. **[M]**
+  ⚠️ health data — local-only.
+- **Menstrual cycle** (`MenstruationFlowRecord`, `OvulationTestRecord`…; open-source **`drip`** as a data-model
+  reference) — **cycle-phase nutrition**: iron + vit-C in menstruation, luteal energy bump, Ca/Mg for PMS; phase ring
+  over the menu. **[M]** ⚠️ reproductive-health data — strictly local, explicit opt-in.
+- **Glucose** (`BloodGlucoseRecord`, if a CGM app writes to Health Connect) — zero-cloud read. **[M]**
+- **Hydration + continuous HR** (`HydrationRecord` vs the weather target; `HeartRateRecord` series). **[S]**
+
+**Cloud but keyless & cacheable — the open-meteo family (CC BY 4.0, covers India):**
+- **Weather** (open-meteo Forecast, **no key**) — temperature-driven hydration target + warming/cooling/monsoon dish
+  nudges; augments Rituva's existing **seasonal-menu** engine with *live* weather, not just calendar season. **[S]**
+- **Air quality / AQI** (open-meteo Air-Quality, **no key**; or WAQI / OpenAQ / CPCB with a free key) — high-PM2.5 day →
+  **antioxidant / vit-C/E nudge** (amla, guava, citrus, greens). **[S]**
+- **UV index** (open-meteo, no key; OpenUV free 50/day) — low UVB window (winter, or UVB blocked by high AQI) is the
+  real driver of vit-D deficiency → emphasize dietary D (fortified milk, mushrooms) / discuss supplement. A sun↔diet
+  link no nutrition app surfaces. **[S]**
+
+**Self-hosted / partner — glycemic-response analytics:**
+- **CGM per-dish postprandial ranking** — **Nightscout** (`cgm-remote-monitor`, AGPL-3.0, self-hosted REST
+  `/api/v1/entries.json`; Libre/Dexcom/Medtronic uploaders) or the **Dexcom Developer API** (OAuth2). Build a
+  *personalized glycemic ranking of the user's own Knowledge-DB dishes* (spike height + incremental AUC) — powerful for
+  the diabetic / condition-aware profiles. **[L]** ⚠️ CGM = PHI; keep local, never upload. *(Freestyle Libre has no
+  official self-serve API — community LibreLinkUp clients only, ToU risk.)*
+
+**On-device, maximally sensitive — mirrors the IFCT local-only playbook:**
+- **Nutrigenomics** — a 23andMe / raw-DNA export is just an `rsid→genotype` TSV; **parse entirely on-device** against a
+  small, self-authored SNP→nutrient table. Actionable SNPs: `rs4988235` (LCT/MCM6 **lactase persistence** — big for a
+  dairy-heavy Bihari veg diet), `rs1801133` (MTHFR C677T → folate / leafy-green emphasis), `rs762551` (CYP1A2 →
+  caffeine timing & cutoff). SNPs reweight; the engine owns the numbers. ⚠️ **SNPedia is CC BY-NC-SA 3.0
+  (non-commercial — like IFCT, never bundle its text into the public repo).** Local-only, explicit consent. **[L]**
+
+**Genuinely novel:**
+- **Plant-diversity score** — **American Gut / Microsetta** (UCSD Knight Lab) as *population priors* (not per-user
+  sequencing) → nudge toward the "~30 different plants/week" finding + fermented-food emphasis. New fibre-diversity
+  gauge. **[M]**
+- **Moon phase** — computed **on-device astronomically, no API** → **fasting / vrat-aware planning** (Ekadashi,
+  Purnima, Amavasya). Culturally apt for Indian households; unique. **[S]** *(ties into §6 festival/fasting modes.)*
+- **Honest negative:** no free pollen API covers India (open-meteo pollen is Europe-only) — don't promise it.
+
+**Top-3 ROI:** steps→dynamic TDEE · CGM per-dish glycemic ranking · nutrigenomic lactase/folate/caffeine reweighting.
+**Privacy-critical (local-only, explicit consent):** glucose, genetics, menstrual data.
+
+---
+
+## 14. Advanced analytics visualizations & their animations — **shipped + roadmap**
+
+**Shipped this session** (`insights.dart`; every chart a `CustomPainter` driven by `TweenAnimationBuilder`, every number
+from the on-device engine totals):
+- **8-axis nutrient-balance radar** (Day) — kcal/protein/carb/fat/fibre/Fe/Ca/B12 vs target; green dots when met, amber
+  when short; web sweeps open on mount.
+- **100-cell calorie-composition waffle** (Day) — protein/carb/fat energy split, with legend.
+- **Mean-Adequacy-Ratio semi-gauge** (Week) — arc eases to value.
+- **7×6 week-adherence heatmap** (Week) — day × nutrient, on-target / close / short; opacity cascade.
+- **Count-up ring gauges** (Day) — values tween from 0 on mount.
+- *(Pre-existing, now animated: ring gauges, macro donut, trend bars, budget bars.)*
+
+**Roadmap (viz → metric it serves → the animation that fits):**
+
+| Visualization | Serves (from §12/§13) | Entrance animation |
+|---|---|---|
+| **Bullet graphs** (AAA-accessible) | HEI / AHEI / NRF9.3 components, NFHS percentile band | measure bar grows; qualitative bands fade in |
+| **Diverging bar** (centred at 0) | DII (pro↔anti-inflammatory), PHDI over/under target | bars grow outward from centre |
+| **Line + projection band** | weight trajectory, adherence forecast (EWMA) | path draws L→R, band fades, goal marker drops |
+| **Small-multiples bars** | protein distribution + leucine threshold line | staggered per meal; threshold slides in |
+| **Stacked area** | carb / energy timing across the day | areas rise + crossfade on day-switch |
+| **Treemap** | sustainability footprint by food | tiles scale-in (area = impact) |
+| **Gauge vs boundary** | footprint vs EAT-Lancet per-capita budget | arc eases to value |
+| **AGP percentile band** | CGM glucose (median + IQR envelope) | band draws L→R |
+| **Food leaderboard bar** | NRF9.3 / ANDI "best foods", GL ranking | bars grow + reorder |
+| **Scatter + trend line** | diet→sleep / diet→HRV correlation | points fade in, trend line draws |
+| **Calendar heatmap** (GitHub-style) | 366-day adherence / streak | cells cascade by week |
+| **Celebration micro-animation** | goal-met / streak milestone | confetti or ring-burst |
+
+**Animation guardrails** (from `ui-ux-pro-max`): 150–300 ms micro / ≤400 ms complex; **transform + opacity only**
+(never width/height/top/left); ease-out on enter, exit ~60–70% of enter; stagger lists 30–50 ms; **respect
+`prefers-reduced-motion`**; never block input; charts must not cause layout reflow / CLS.
+
+---
+
+## 15. Suggested build order (maps to PRD §19)
 
 1. **P0 — turn the generator into an app:** food logging loop (barcode via OFF + voice via Vosk) → adherence it already
    computes; **Health Connect** measured TDEE; reminders/streaks. *(§1, §2, §11)*
@@ -227,6 +369,12 @@ changes ("different Sunday breakfast" → real alternative + exact kcal/protein 
    **region-aware deficiency defaults**; **Hindi + regional languages**. *(§5, §6, §7, §8, §10)*
 4. **P2 — reach & delight:** photo logging; Telegram/WhatsApp; community recipes; calendar/PDF export; on-device
    open-weights assistant. *(§1, §11, §9)*
+
+**Analytics-depth track (parallel, mostly engine-only — §12/§13/§14):** the cheapest big win is the **one IFCT-column
+extraction** (unlocks HEI/AHEI/NRF9.3/DII/PHDI/food-synergy/leucine together) plus the **ship-now** scores that need no
+new data (MDD-W, NAR bars, protein distribution, weight trajectory, deficiency-risk). On the signal side, **steps →
+dynamic TDEE** (Health Connect) is the highest-ROI integration for the existing planner. Two items need a data-sourcing
+decision first: the **DII global reference table** and **NFHS-5 distributions**.
 
 **Two licensing traps to never trip:** (1) don't ship IFCT/ICMR-NIN documents or INDB values in the public build —
 encode numbers only; (2) non-commercial data (FAO, Recipe1M/FoodSeg103) and no-redistribution APIs (Nutritionix,
