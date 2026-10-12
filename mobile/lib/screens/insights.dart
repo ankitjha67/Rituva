@@ -836,16 +836,14 @@ class _TrendBars extends StatelessWidget {
 /// A number that counts up from 0 on build (easeOut), for stat headlines.
 class _CountUp extends StatelessWidget {
   final double value;
-  final String suffix;
-  final int decimals;
   final TextStyle? style;
-  const _CountUp(this.value, {this.suffix = '', this.decimals = 0, this.style});
+  const _CountUp(this.value, {this.style});
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
         tween: Tween(begin: 0, end: value),
         duration: const Duration(milliseconds: 850),
         curve: Curves.easeOutCubic,
-        builder: (_, v, __) => Text('${v.toStringAsFixed(decimals)}$suffix', style: style),
+        builder: (_, v, __) => Text('${v.round()}', style: style),
       );
 }
 
@@ -1050,18 +1048,25 @@ class _SemiGauge extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox(
         height: 118,
+        width: double.infinity,
         child: TweenAnimationBuilder<double>(
           tween: Tween(begin: 0, end: value.clamp(0.0, 1.0)),
           duration: const Duration(milliseconds: 900),
           curve: Curves.easeOutCubic,
+          // Align (no size factors) fills the full width so the painter spans
+          // the whole card; the label/value then sit centred inside the bowl
+          // instead of cramping the arc into the text's own width.
           builder: (_, v, __) => CustomPaint(
             size: Size.infinite,
             painter: _GaugePainter(v, color),
-            child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-              Text(center, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 22)),
-              Text(label, style: const TextStyle(color: R.muted, fontSize: 11)),
-              const SizedBox(height: 6),
-            ]),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Text(center, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 22)),
+                Text(label, style: const TextStyle(color: R.muted, fontSize: 11)),
+                const SizedBox(height: 10),
+              ]),
+            ),
           ),
         ),
       );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'api.dart';
 import 'theme.dart';
 import 'screens/today.dart';
@@ -9,7 +10,14 @@ import 'screens/health.dart';
 import 'screens/profile_edit.dart';
 import 'screens/meal_chat.dart';
 
-void main() => runApp(const RituvaApp());
+void main() {
+  // Hold the native splash until the first loaded frame paints, so the Today
+  // screen's entrance animations are seen from the start instead of running
+  // (and finishing) behind the splash during engine warm-up.
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: binding);
+  runApp(const RituvaApp());
+}
 
 class RituvaApp extends StatelessWidget {
   const RituvaApp({super.key});
@@ -32,6 +40,8 @@ class _HomeShellState extends State<HomeShell> {
   RituvaApi? api;
   int index = 0;
   int _insVisit = 0; // bumps when Analytics is opened, so its charts re-animate each visit
+  int _homeVisit = 0; // bumps when Today is opened, so its hero card re-animates each visit
+  bool _splashGone = false; // native splash removed once, after the first loaded frame
   bool loading = true;   // full-screen: first load & member switch
   bool busy = false;     // inline: regenerate — keeps the UI mounted
   bool offline = false;
@@ -182,6 +192,13 @@ class _HomeShellState extends State<HomeShell> {
     if (loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator(color: R.gold)));
     }
+    // Lift the native splash one frame after the first non-loading UI paints
+    // (success or error), so the Today entrance animation is visible from its
+    // start instead of running behind the splash — and we never get stuck on it.
+    if (!_splashGone) {
+      _splashGone = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => FlutterNativeSplash.remove());
+    }
     if (error != null) {
       return _ErrorScreen(
         error: error!,
@@ -193,6 +210,7 @@ class _HomeShellState extends State<HomeShell> {
     final a = api!;
     final screens = [
       TodayScreen(
+          key: ValueKey('today-$_homeVisit'),
           ctx: ctx!,
           targets: targets!,
           day: day!,
@@ -273,6 +291,7 @@ class _HomeShellState extends State<HomeShell> {
         labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
         onDestinationSelected: (i) => setState(() {
           if (i == 3 && index != 3) _insVisit++; // re-mount Analytics so its charts animate in
+          if (i == 0 && index != 0) _homeVisit++; // re-mount Today so its hero card re-animates
           index = i;
         }),
         destinations: const [

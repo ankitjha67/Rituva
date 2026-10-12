@@ -166,7 +166,6 @@ class TodayScreen extends StatelessWidget {
   }
 
   Widget _energyCard(int kcal, int tgt, Map totals) {
-    final pct = (kcal / (tgt == 0 ? 1 : tgt)).clamp(0.0, 1.0);
     final macros = <List<Object>>[
       ['Protein', 'protein', 'protein_g', R.teal],
       ['Carb', 'carb', 'carb_g', R.gold],
@@ -183,20 +182,29 @@ class TodayScreen extends StatelessWidget {
             SizedBox(
               width: 108,
               height: 108,
-              child: CustomPaint(
-                painter: _RingPainter(pct),
-                child: Center(
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Text('$kcal', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 22)),
-                    Text('of $tgt kcal', style: const TextStyle(color: R.muted, fontSize: 10)),
-                  ]),
+              // Count up + sweep the arc on first build; on a swap the kcal
+              // value changes and it eases smoothly from the old number.
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: kcal.toDouble()),
+                duration: const Duration(milliseconds: 900),
+                curve: Curves.easeOutCubic,
+                builder: (_, v, __) => CustomPaint(
+                  painter: _RingPainter((v / (tgt == 0 ? 1 : tgt)).clamp(0.0, 1.0)),
+                  child: Center(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text('${v.round()}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 22)),
+                      Text('of $tgt kcal', style: const TextStyle(color: R.muted, fontSize: 10)),
+                    ]),
+                  ),
                 ),
               ),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
-                children: macros.map((m) {
+                children: macros.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final m = entry.value;
                   final cur = (totals[m[1]] as num?)?.toDouble() ?? 0;
                   final t = (targets[m[2]] as num?)?.toDouble() ?? 1;
                   return Padding(
@@ -215,11 +223,17 @@ class TodayScreen extends StatelessWidget {
                         const SizedBox(height: 3),
                         ClipRRect(
                           borderRadius: BorderRadius.circular(9),
-                          child: LinearProgressIndicator(
-                            value: (cur / (t == 0 ? 1 : t)).clamp(0.0, 1.0),
-                            minHeight: 7,
-                            backgroundColor: R.line,
-                            color: m[3] as Color,
+                          // Fill from empty on first build, staggered per macro.
+                          child: TweenAnimationBuilder<double>(
+                            tween: Tween(begin: 0, end: (cur / (t == 0 ? 1 : t)).clamp(0.0, 1.0)),
+                            duration: Duration(milliseconds: 650 + i * 110),
+                            curve: Curves.easeOutCubic,
+                            builder: (_, v, __) => LinearProgressIndicator(
+                              value: v,
+                              minHeight: 7,
+                              backgroundColor: R.line,
+                              color: m[3] as Color,
+                            ),
                           ),
                         ),
                       ],
