@@ -54,15 +54,15 @@ class RituvaApi {
 
   RituvaApi._(this.baseUrl);
 
-  /// Builds a client, restoring a user-saved server URL if one exists, and pointing the
-  /// engine at a previously downloaded library if there is one.
+  /// Builds a client. The app is standalone — every read is computed on-device — so no
+  /// server URL is restored; any one saved by an older build is cleared. (A developer can
+  /// still point a build at the backend with `--dart-define=RITUVA_API=…`.) Restores the
+  /// saved NVIDIA key and points the engine at a previously downloaded library if present.
   static Future<RituvaApi> create() async {
-    var url = _default;
     var nvKey = _bakedNvKey;
     try {
       final p = await SharedPreferences.getInstance();
-      final saved = p.getString(_prefKey);
-      if (saved != null && saved.trim().isNotEmpty) url = saved.trim();
+      await p.remove(_prefKey);   // standalone: drop any server URL a previous build saved
       final nv = p.getString(_nvKeyPref);
       if (nv != null && nv.trim().isNotEmpty) nvKey = nv.trim();
     } catch (_) {/* prefs unavailable → defaults */}
@@ -70,54 +70,13 @@ class RituvaApi {
       final dir = await getApplicationDocumentsDirectory();
       KB.downloadPath = '${dir.path}/rituva_kb_full.json';
     } catch (_) {/* no writable dir → bundled KB only */}
-    final api = RituvaApi._(url);
+    final api = RituvaApi._(_default);
     api.nvidiaKey = nvKey;
     return api;
   }
 
-  /// Pull the server's full Knowledge DB onto the device for offline use.
-  ///
-  /// This is how the personal-use IFCT library reaches the phone without ever entering
-  /// the repo or an APK: it moves from the user's own machine to the user's own device.
-  /// Returns a short summary of what landed.
-  Future<Map<String, dynamic>> downloadLibrary() async {
-    final path = KB.downloadPath;
-    if (path == null) throw Exception('No writable storage on this device.');
-    final r = await http.get(_u('/kb/export')).timeout(const Duration(seconds: 60));
-    if (r.statusCode >= 400) throw Exception('GET /kb/export → ${r.statusCode}');
-    final body = jsonDecode(r.body) as Map<String, dynamic>;
-    final foods = (body['foods'] as List?)?.length ?? 0;
-    final recipes = (body['recipes'] as List?)?.length ?? 0;
-    if (foods == 0 || recipes == 0) throw Exception('Server returned an empty library.');
-    await File(path).writeAsString(r.body);
-    await local.refreshKb();
-    return {'foods': foods, 'recipes': recipes,
-            'llm_recipes': (body['llm_recipes'] as Map?)?.length ?? 0};
-  }
-
-  /// Forget a downloaded library and fall back to the bundled one.
-  Future<void> clearLibrary() async {
-    final path = KB.downloadPath;
-    if (path == null) return;
-    final f = File(path);
-    if (await f.exists()) await f.delete();
-    await local.refreshKb();
-  }
-
+  /// Counts for the on-device library (bundled, or a previously downloaded snapshot).
   Future<Map<String, dynamic>> libraryInfo() => local.info();
-
-  static String get defaultUrl => _default;
-  bool get isDefaultUrl => baseUrl == _default;
-
-  /// Persists a new backend URL (empty string resets to the default).
-  Future<void> setBaseUrl(String url) async {
-    final v = url.trim();
-    baseUrl = v.isEmpty ? _default : v;
-    try {
-      final p = await SharedPreferences.getInstance();
-      v.isEmpty ? await p.remove(_prefKey) : await p.setString(_prefKey, v);
-    } catch (_) {}
-  }
 
   // ------------------------------------------------------- the assistant ----
   /// Whether the in-app LLM assistant can run (an NVIDIA key is configured). When true,
@@ -264,27 +223,10 @@ class RituvaApi {
   // validates, swaps and costs out groceries from the Knowledge DB on the phone, so
   // "offline" means "computed here", not "degraded".
 
-  /// Whether an optional backend server is configured. When false, the app is fully
-  /// standalone — every read is computed on-device and nothing probes the network.
+  /// Whether an optional backend server is configured (only via a dev `--dart-define`;
+  /// there is no in-app setting). When false — the default — the app is fully standalone:
+  /// every read is computed on-device and nothing touches the network.
   bool get hasServer => baseUrl.trim().isNotEmpty;
-
-  /// Fast reachability probe — sets [offline] so subsequent calls go straight to the
-  /// local engine instead of each waiting out the full timeout. With no server
-  /// configured there is nothing to probe, so this returns immediately.
-  Future<bool> reachable() async {
-    if (!hasServer) {
-      offline = true;
-      return false;
-    }
-    try {
-      final r = await http.get(_u('/health')).timeout(const Duration(seconds: 3));
-      offline = r.statusCode >= 400;
-      return !offline;
-    } catch (_) {
-      offline = true;
-      return false;
-    }
-  }
 
   /// Run everything on-device even when a server is reachable.
   bool preferOffline = false;
@@ -434,11 +376,6 @@ class RituvaApi {
       rethrow;
     }
   }
-
-  String exportUrl(String planId, {int people = 2}) =>
-      '$baseUrl/plans/$planId/export.xlsx?people=$people';
-  String exportPdfUrl(String planId, {int people = 2}) =>
-      '$baseUrl/plans/$planId/export.pdf?people=$people';
 
   // ---------------------------------- offline system context (mirrors context.py) ----
   Map<String, dynamic> _localContext() {

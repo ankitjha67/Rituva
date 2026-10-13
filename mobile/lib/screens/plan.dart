@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../api.dart';
 import '../theme.dart';
 import 'recipe_sheet.dart';
@@ -25,32 +24,9 @@ class PlanScreen extends StatelessWidget {
     return ListView(
       padding: kScreenPad,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('This week', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-                  Text('${summary['on_target']}/7 on target · avg DQS ${summary['avg_dqs']}',
-                      style: const TextStyle(color: R.muted, fontSize: 12)),
-                ],
-              ),
-            ),
-            // Export is served by the backend; only offer it when a server is connected.
-            if (api.hasServer)
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.download_outlined),
-                tooltip: 'Export',
-                onSelected: (v) => _export(context, v),
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'pdf', child: Text('Export PDF')),
-                  PopupMenuItem(value: 'xlsx', child: Text('Export Excel')),
-                ],
-              ),
-          ],
-        ),
+        const Text('This week', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+        Text('${summary['on_target']}/7 on target · avg DQS ${summary['avg_dqs']}',
+            style: const TextStyle(color: R.muted, fontSize: 12)),
         const SizedBox(height: 12),
         Row(children: [
           Expanded(
@@ -181,16 +157,6 @@ class PlanScreen extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _export(BuildContext context, String kind) async {
-    final id = plan['plan_id'] as String;
-    final url = kind == 'pdf' ? api.exportPdfUrl(id) : api.exportUrl(id);
-    final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    if (!ok && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not open export — connect a server in Profile.')));
-    }
   }
 
   Future<void> _grocery(BuildContext context) async {

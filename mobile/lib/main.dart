@@ -44,7 +44,6 @@ class _HomeShellState extends State<HomeShell> {
   bool _splashGone = false; // native splash removed once, after the first loaded frame
   bool loading = true;   // full-screen: first load & member switch
   bool busy = false;     // inline: regenerate — keeps the UI mounted
-  bool offline = false;
   String? error;
   String memberId = 'aarav';
   int variant = 0;
@@ -65,8 +64,6 @@ class _HomeShellState extends State<HomeShell> {
     try {
       api ??= await RituvaApi.create();
       final a = api!;
-      a.offline = false;      // re-probe the server on every (re)load
-      await a.reachable();    // fast-fail to the offline demo if unreachable (~2s, not ~20s of retries)
       ctx = await a.context();
       members = await a.members();
       member = await a.member(memberId);
@@ -79,7 +76,6 @@ class _HomeShellState extends State<HomeShell> {
       final days = (plan!['days'] as List).cast<Map<String, dynamic>>();
       if (days.isEmpty) throw StateError('plan returned no days');
       day = days.firstWhere((d) => d['date'] == ctx!['today'], orElse: () => days.first);
-      offline = a.offline;
     } catch (e) {
       error = '$e';
     }
@@ -92,11 +88,6 @@ class _HomeShellState extends State<HomeShell> {
     if (mounted) setState(() => index = 0);
   }
 
-  Future<void> _saveServer(String url) async {
-    await api?.setBaseUrl(url);
-    await _load();
-  }
-
   Future<void> _regenerate() async {
     final a = api;
     if (a == null || ctx == null || loading || busy) return;
@@ -107,7 +98,6 @@ class _HomeShellState extends State<HomeShell> {
       final days = (fresh['days'] as List).cast<Map<String, dynamic>>();
       plan = fresh;
       day = days.firstWhere((d) => d['date'] == ctx!['today'], orElse: () => days.first);
-      offline = a.offline;
       if (mounted) _snack('Fresh menu ready — a new mix of dishes for the week.');
     } catch (e) {
       if (mounted) _snack('Could not regenerate: $e');
@@ -200,12 +190,7 @@ class _HomeShellState extends State<HomeShell> {
       WidgetsBinding.instance.addPostFrameCallback((_) => FlutterNativeSplash.remove());
     }
     if (error != null) {
-      return _ErrorScreen(
-        error: error!,
-        serverUrl: api?.baseUrl ?? RituvaApi.defaultUrl,
-        onRetry: _load,
-        onSaveServer: _saveServer,
-      );
+      return _ErrorScreen(error: error!, onRetry: _load);
     }
     final a = api!;
     final screens = [
@@ -237,9 +222,6 @@ class _HomeShellState extends State<HomeShell> {
         plan: plan!,
         onSwitch: _switchMember,
         onSaved: _load,
-        serverUrl: a.baseUrl,
-        offline: offline,
-        onSaveServer: _saveServer,
       ),
     ];
     return Scaffold(
@@ -279,9 +261,6 @@ class _HomeShellState extends State<HomeShell> {
       body: Column(
         children: [
           if (busy) const LinearProgressIndicator(minHeight: 2, color: R.gold, backgroundColor: R.line),
-          // Only nudge about a server when one is actually configured but unreachable.
-          // With no server (standalone) the on-device engine is the whole app, not a fallback.
-          if (offline && a.hasServer) _OfflineBanner(onTap: () => setState(() => index = 5)),
           Expanded(child: IndexedStack(index: index, children: screens)),
         ],
       ),
@@ -307,58 +286,13 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
-/// Thin strip shown when the app is running on the bundled demo (no server).
-/// Tapping it jumps straight to the Server settings so the fix is one tap away.
-class _OfflineBanner extends StatelessWidget {
-  final VoidCallback onTap;
-  const _OfflineBanner({required this.onTap});
-  @override
-  Widget build(BuildContext context) => Material(
-        color: R.gold.withValues(alpha: .14),
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            child: Row(
-              children: const [
-                Icon(Icons.cloud_off, size: 15, color: R.gold),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text('Offline — menus planned on this phone. Tap for server settings.',
-                      style: TextStyle(color: R.gold, fontSize: 11.5)),
-                ),
-                Icon(Icons.chevron_right, size: 16, color: R.gold),
-              ],
-            ),
-          ),
-        ),
-      );
-}
-
-/// Friendly connection screen (only shown for real server errors — network
-/// failures fall back to the offline demo instead of erroring).
-class _ErrorScreen extends StatefulWidget {
+/// Shown only if the on-device engine can't produce a plan (rare — e.g. corrupt
+/// stored data). It offers a retry; the app is standalone, so there is no server
+/// to fall back to or configure.
+class _ErrorScreen extends StatelessWidget {
   final String error;
-  final String serverUrl;
   final Future<void> Function() onRetry;
-  final Future<void> Function(String) onSaveServer;
-  const _ErrorScreen({
-    required this.error,
-    required this.serverUrl,
-    required this.onRetry,
-    required this.onSaveServer,
-  });
-  @override
-  State<_ErrorScreen> createState() => _ErrorScreenState();
-}
-
-class _ErrorScreenState extends State<_ErrorScreen> {
-  late final TextEditingController ctrl = TextEditingController(text: widget.serverUrl);
-  @override
-  void dispose() {
-    ctrl.dispose();
-    super.dispose();
-  }
+  const _ErrorScreen({required this.error, required this.onRetry});
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -373,36 +307,14 @@ class _ErrorScreenState extends State<_ErrorScreen> {
                   const SizedBox(height: 12),
                   const Text("Couldn't load", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
                   const SizedBox(height: 8),
-                  Text(widget.error, textAlign: TextAlign.center, style: const TextStyle(color: R.muted, fontSize: 12)),
+                  Text(error, textAlign: TextAlign.center, style: const TextStyle(color: R.muted, fontSize: 12)),
                   const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: widget.onRetry,
+                      onPressed: onRetry,
                       icon: const Icon(Icons.refresh, size: 18),
                       label: const Text('Try again'),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  const Divider(color: R.line),
-                  const SizedBox(height: 8),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('Using a Rituva server? (optional)',
-                        style: TextStyle(color: R.muted, fontSize: 11, letterSpacing: .5)),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: ctrl,
-                    decoration: const InputDecoration(labelText: 'Server URL', hintText: 'http://192.168.1.5:8000'),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () => widget.onSaveServer(ctrl.text),
-                      icon: const Icon(Icons.sync, size: 18),
-                      label: const Text('Save & connect'),
                     ),
                   ),
                 ],
@@ -413,7 +325,7 @@ class _ErrorScreenState extends State<_ErrorScreen> {
       );
 }
 
-/// Profile: member switch, provenance, and the backend Server URL setting.
+/// Profile: member switch, the on-device library, the assistant key, and provenance.
 class ProfileScreen extends StatefulWidget {
   final RituvaApi api;
   final List members;
@@ -422,9 +334,6 @@ class ProfileScreen extends StatefulWidget {
   final Map<String, dynamic> plan;
   final Future<void> Function(String) onSwitch;
   final Future<void> Function() onSaved;
-  final String serverUrl;
-  final bool offline;
-  final Future<void> Function(String) onSaveServer;
   const ProfileScreen({
     super.key,
     required this.api,
@@ -434,20 +343,15 @@ class ProfileScreen extends StatefulWidget {
     required this.plan,
     required this.onSwitch,
     required this.onSaved,
-    required this.serverUrl,
-    required this.offline,
-    required this.onSaveServer,
   });
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  late final TextEditingController urlCtrl = TextEditingController(text: widget.serverUrl);
   late final TextEditingController keyCtrl = TextEditingController(text: widget.api.nvidiaKey);
   bool _showKey = false;
   Map<String, dynamic>? lib;
-  bool syncing = false;
 
   @override
   void initState() {
@@ -464,7 +368,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
-    urlCtrl.dispose();
     keyCtrl.dispose();
     super.dispose();
   }
@@ -478,29 +381,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         content: Text(widget.api.hasLLM ? 'Assistant key saved.' : 'Assistant key cleared.'),
       ));
     }
-  }
-
-  Future<void> _download() async {
-    setState(() => syncing = true);
-    try {
-      final r = await widget.api.downloadLibrary();
-      await _loadLib();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          behavior: SnackBarBehavior.floating,
-          content: Text('Saved ${r['recipes']} dishes and ${r['foods']} foods for offline use.'),
-        ));
-      }
-      await widget.onSaved();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          behavior: SnackBarBehavior.floating,
-          content: Text('Could not download: $e'),
-        ));
-      }
-    }
-    if (mounted) setState(() => syncing = false);
   }
 
   void _editProfile(BuildContext context, Map<String, dynamic>? m) {
@@ -572,8 +452,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ]),
         const SizedBox(height: 18),
-        // ---- Offline library ----
-        const Text('OFFLINE LIBRARY',
+        // ---- On-device library ----
+        const Text('LIBRARY',
             style: TextStyle(color: R.muted, fontSize: 11, letterSpacing: 1.2)),
         const SizedBox(height: 8),
         Card(
@@ -584,42 +464,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
-                  Icon(lib?['full'] == true ? Icons.offline_pin : Icons.offline_bolt,
-                      size: 16, color: lib?['full'] == true ? R.green : R.teal),
+                  const Icon(Icons.offline_bolt, size: 16, color: R.teal),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       lib == null
                           ? 'Checking…'
-                          : '${lib!['recipes']} dishes · ${lib!['foods']} foods on this phone'
-                              '${lib!['full'] == true ? ' (downloaded)' : ' (built in)'}',
-                      style: TextStyle(
-                          color: lib?['full'] == true ? R.green : R.teal, fontSize: 12),
+                          : '${lib!['recipes']} dishes · ${lib!['foods']} foods on this phone',
+                      style: const TextStyle(color: R.teal, fontSize: 12),
                     ),
                   ),
                 ]),
                 const SizedBox(height: 8),
                 const Text(
                   'The whole library ships inside the app — menus, swaps, recipes, groceries '
-                  'and analytics are all computed on this phone, with no server. Re-sync only '
-                  'if you add dishes or pre-write more recipes on the server.',
+                  'and analytics are all computed on this phone. No server or internet needed.',
                   style: TextStyle(color: R.muted, fontSize: 11),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: syncing ? null : _download,
-                    style: OutlinedButton.styleFrom(
-                        foregroundColor: R.teal, side: const BorderSide(color: R.line)),
-                    icon: syncing
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: R.teal))
-                        : const Icon(Icons.sync, size: 18),
-                    label: Text(syncing ? 'Syncing…' : 'Re-sync from server'),
-                  ),
                 ),
               ],
             ),
@@ -676,69 +536,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onPressed: _saveKey,
                     icon: const Icon(Icons.save_outlined, size: 18),
                     label: const Text('Save key'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 18),
-        // ---- Server URL (optional — the app is standalone by default) ----
-        const Text('SERVER (OPTIONAL)',
-            style: TextStyle(color: R.muted, fontSize: 11, letterSpacing: 1.2)),
-        const SizedBox(height: 8),
-        Card(
-          color: R.surface,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Icon(widget.offline ? Icons.cloud_off : Icons.cloud_done,
-                      size: 16, color: widget.offline ? R.gold : R.green),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      widget.offline
-                          ? 'No server — everything is computed on this phone.'
-                          : 'Connected to ${widget.serverUrl}',
-                      style: TextStyle(color: widget.offline ? R.gold : R.green, fontSize: 12),
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: urlCtrl,
-                  keyboardType: TextInputType.url,
-                  decoration: const InputDecoration(
-                    labelText: 'Backend URL',
-                    hintText: 'http://192.168.1.5:8000',
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Run the Rituva backend, then enter its address. On the same Wi-Fi, '
-                  'use your PC\'s LAN IP (e.g. http://192.168.1.5:8000). Leave blank to reset.',
-                  style: TextStyle(color: R.muted, fontSize: 11),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: () => widget.onSaveServer(urlCtrl.text),
-                    icon: const Icon(Icons.sync, size: 18),
-                    label: const Text('Save & reconnect'),
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      urlCtrl.text = '';
-                      widget.onSaveServer('');
-                    },
-                    child: const Text('Reset to default'),
                   ),
                 ),
               ],
