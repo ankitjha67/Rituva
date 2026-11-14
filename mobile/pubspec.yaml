@@ -15,8 +15,12 @@ dependencies:
   url_launcher: ^6.2.5
   path_provider: ^2.1.2      # where a downloaded full KB is stored for offline use
   flutter_native_splash: ^2.4.1   # runtime preserve()/remove() + splash generation
+  pdf: ^3.11.1               # on-device PDF generation (weekly plan + grocery export)
+  printing: ^5.13.2          # native share / print sheet for the generated PDF
 
 dev_dependencies:
+  flutter_test:
+    sdk: flutter
   flutter_lints: ^4.0.0
   flutter_launcher_icons: ^0.13.1
 

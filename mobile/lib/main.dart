@@ -205,7 +205,7 @@ class _HomeShellState extends State<HomeShell> {
           onRegenerate: _regenerate,
           regenerating: busy,
           onApplySwap: _applySwap),
-      PlanScreen(plan: plan!, ctx: ctx!, api: a, onRegenerate: _regenerate, regenerating: busy),
+      PlanScreen(plan: plan!, ctx: ctx!, member: member!, api: a, onRegenerate: _regenerate, regenerating: busy),
       DiscoverScreen(api: a, plan: plan!),
       InsightsScreen(
           key: ValueKey('insights-$_insVisit'),

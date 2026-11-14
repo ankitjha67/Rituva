@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:printing/printing.dart';
 import '../api.dart';
 import '../theme.dart';
+import '../engine/pdf_export.dart';
 import 'recipe_sheet.dart';
 
 class PlanScreen extends StatelessWidget {
-  final Map<String, dynamic> plan, ctx;
+  final Map<String, dynamic> plan, ctx, member;
   final RituvaApi api;
   final Future<void> Function() onRegenerate;
   final bool regenerating;
@@ -12,6 +14,7 @@ class PlanScreen extends StatelessWidget {
     super.key,
     required this.plan,
     required this.ctx,
+    required this.member,
     required this.api,
     required this.onRegenerate,
     required this.regenerating,
@@ -24,9 +27,31 @@ class PlanScreen extends StatelessWidget {
     return ListView(
       padding: kScreenPad,
       children: [
-        const Text('This week', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-        Text('${summary['on_target']}/7 on target · avg DQS ${summary['avg_dqs']}',
-            style: const TextStyle(color: R.muted, fontSize: 12)),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('This week', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                  Text('${summary['on_target']}/7 on target · avg DQS ${summary['avg_dqs']}',
+                      style: const TextStyle(color: R.muted, fontSize: 12)),
+                ],
+              ),
+            ),
+            // On-device PDF of the week (+ grocery) — generated on the phone, no server.
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.picture_as_pdf_outlined, color: R.gold),
+              tooltip: 'Export PDF',
+              onSelected: (v) => _exportPdf(context, share: v == 'share'),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'print', child: Text('Print / Save as PDF')),
+                PopupMenuItem(value: 'share', child: Text('Share PDF')),
+              ],
+            ),
+          ],
+        ),
         const SizedBox(height: 12),
         Row(children: [
           Expanded(
@@ -157,6 +182,32 @@ class PlanScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Generate the week's plan (+ grocery) as a PDF on the phone, then hand it to
+  /// the OS print dialog (print / save-as-PDF) or the share sheet. No server.
+  Future<void> _exportPdf(BuildContext context, {required bool share}) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(
+        behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1), content: Text('Building PDF…')));
+    try {
+      // Grocery is best-effort: a clean plan PDF is still useful if it can't be built.
+      Map<String, dynamic>? grocery;
+      try {
+        grocery = await api.grocery(plan['plan_id'] as String, people: 2, plan: plan);
+      } catch (_) {/* skip grocery section */}
+      final bytes = await buildPlanPdf(plan: plan, member: member, grocery: grocery);
+      final name = '${member['name'] ?? 'plan'}'.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+      final file = 'rituva-$name-week.pdf';
+      if (share) {
+        await Printing.sharePdf(bytes: bytes, filename: file);
+      } else {
+        await Printing.layoutPdf(onLayout: (_) async => bytes, name: file);
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+          behavior: SnackBarBehavior.floating, content: Text('Could not make the PDF: $e')));
+    }
   }
 
   Future<void> _grocery(BuildContext context) async {
