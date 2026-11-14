@@ -13,6 +13,19 @@ Full specification: [`PRD.md`](PRD.md). Visual design: [`design/prototype.html`]
 
 ---
 
+## The app
+
+<p align="center">
+  <img src="mobile/assets/icon/rituva_icon.png" width="104" alt="Rituva app icon"><br>
+  <em>A standalone Android app — planning, analytics, recipes, grocery and an AI assistant, all on-device.</em>
+</p>
+
+| Today | Plan | Discover |
+|:---:|:---:|:---:|
+| ![Today](docs/screenshots/01-today.png) | ![Plan](docs/screenshots/02-plan.png) | ![Discover](docs/screenshots/03-discover.png) |
+| **Analytics** | **Health** | **Profile** |
+| ![Analytics](docs/screenshots/04-analytics.png) | ![Health](docs/screenshots/05-health.png) | ![Profile](docs/screenshots/06-profile.png) |
+
 ## The one rule that shapes the architecture
 
 > **The LLM proposes; the deterministic engine disposes.**

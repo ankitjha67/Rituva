@@ -13,6 +13,7 @@ on:
     branches: [ main ]
     paths-ignore:      # backend/docs-only changes don't need a 20-min APK rebuild
       - "**.md"
+      - "docs/**"
       - "design/**"
       - "rituva/**"
       - "tests/**"
