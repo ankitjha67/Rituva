@@ -30,6 +30,7 @@ jobs:
       run:
         working-directory: mobile
     steps:
+      - uses: actions/checkout@v4   # always, so mobile/ exists for the steps below
       - name: Status
         run: |
           if [ -n "$SHOREBIRD_TOKEN" ]; then
@@ -38,8 +39,6 @@ jobs:
             echo "Shorebird inactive. Add the SHOREBIRD_TOKEN secret and commit mobile/shorebird.yaml to enable OTA code push."
           fi
 
-      - uses: actions/checkout@v4
-        if: ${{ env.SHOREBIRD_TOKEN != '' }}
       - uses: actions/setup-java@v4
         if: ${{ env.SHOREBIRD_TOKEN != '' }}
         with:
