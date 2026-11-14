@@ -80,8 +80,8 @@ uvicorn rituva.api:app --reload   # API docs at /docs · app at http://localhost
 | PWA frontend on the approved design (served at `/app`) | ✅ | `web/` |
 | Grocery list (categorized, household-scaled) | ✅ | `rituva/grocery.py` (+ API + PWA/app) |
 | .xlsx export (Excel parity, G7) | ✅ | `rituva/export.py` (+ API + PWA) |
-| Native Android app (Flutter) — **standalone**: on-device engine, menus/swaps/recipes/grocery, animated analytics, and an NVIDIA assistant, all offline | ✅ | `mobile/` (see `mobile/README.md`) |
-| Live Postgres/pgvector · barcode scanning · wearables (Health Connect) · on-device PDF/print · OTA code-push | ⏳ next | — (PRD §12, §18.4, §19) |
+| Native Android app (Flutter) — **standalone**: on-device engine, menus/swaps/recipes/grocery, animated analytics, NVIDIA assistant, **on-device PDF/print export**, and **barcode → Open Food Facts** lookup, all offline | ✅ | `mobile/` (see `mobile/README.md`) |
+| Live Postgres/pgvector · wearables (Health Connect) · OTA code-push | ⏳ next | — (PRD §12, §18.4, §19) |
 
 ## How the requirements map to code
 
