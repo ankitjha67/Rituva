@@ -77,6 +77,13 @@ jobs:
       - name: Generate launcher icons (Rituva My Plate ring)
         run: dart run flutter_launcher_icons
 
+      - name: Generate native splash (Rituva ring on brand-dark)
+        # android/ is scaffolded fresh each run, so the splash resources must be
+        # (re)generated here from the pubspec config — otherwise the APK opens on the
+        # default Flutter splash and FlutterNativeSplash.preserve/remove have nothing
+        # branded to hold.
+        run: dart run flutter_native_splash:create
+
       - name: Build release APK
         run: |
           flutter build apk --release \

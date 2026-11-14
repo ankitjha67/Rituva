@@ -9,7 +9,7 @@ Full specification: [`PRD.md`](PRD.md). Visual design: [`design/prototype.html`]
 
 [![Backend tests](https://github.com/ankitjha67/Rituva/actions/workflows/tests.yml/badge.svg)](https://github.com/ankitjha67/Rituva/actions/workflows/tests.yml)
 [![Build Android APK](https://github.com/ankitjha67/Rituva/actions/workflows/build-apk.yml/badge.svg)](https://github.com/ankitjha67/Rituva/actions/workflows/build-apk.yml)
-[![Latest APK](https://img.shields.io/github/v/release/ankitjha67/Rituva?include_prereleases&label=latest%20APK)](https://github.com/ankitjha67/Rituva/releases/latest)
+[![Latest APK](https://img.shields.io/badge/latest%20APK-download-2ea44f?logo=android&logoColor=white)](https://github.com/ankitjha67/Rituva/releases/latest)
 
 ---
 
@@ -72,8 +72,8 @@ uvicorn rituva.api:app --reload   # API docs at /docs · app at http://localhost
 | PWA frontend on the approved design (served at `/app`) | ✅ | `web/` |
 | Grocery list (categorized, household-scaled) | ✅ | `rituva/grocery.py` (+ API + PWA/app) |
 | .xlsx export (Excel parity, G7) | ✅ | `rituva/export.py` (+ API + download buttons) |
-| Native Android/iOS (Flutter) scaffold | ✅ uncompiled | `mobile/` (see `mobile/README.md`) |
-| Live Postgres/pgvector · PDF export · barcode/wearables | ⏳ next | — (PRD §12, §18.4, §19) |
+| Native Android app (Flutter) — **standalone**: on-device engine, menus/swaps/recipes/grocery, animated analytics, and an NVIDIA assistant, all offline | ✅ | `mobile/` (see `mobile/README.md`) |
+| Live Postgres/pgvector · barcode scanning · wearables (Health Connect) · on-device PDF/print · OTA code-push | ⏳ next | — (PRD §12, §18.4, §19) |
 
 ## How the requirements map to code
 
