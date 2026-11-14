@@ -9,6 +9,7 @@ import 'screens/insights.dart';
 import 'screens/health.dart';
 import 'screens/profile_edit.dart';
 import 'screens/meal_chat.dart';
+import 'screens/scan_screen.dart';
 
 void main() {
   // Hold the native splash until the first loaded frame paints, so the Today
@@ -243,6 +244,10 @@ class _HomeShellState extends State<HomeShell> {
           ],
         ),
         actions: [
+          IconButton(
+              tooltip: 'Scan a barcode',
+              icon: const Icon(Icons.qr_code_scanner),
+              onPressed: () => BarcodeScan.open(context, targets: targets)),
           IconButton(
               tooltip: 'Ask about meals',
               icon: const Icon(Icons.forum_outlined),
