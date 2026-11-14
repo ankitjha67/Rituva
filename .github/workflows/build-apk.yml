@@ -54,6 +54,11 @@ jobs:
           # cleartext HTTP so a self-hosted dev backend is reachable.
           sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application android:usesCleartextTraffic="true"#' android/app/src/main/AndroidManifest.xml
 
+      - name: Patch android/ for Health Connect
+        # minSdk 26 + FlutterFragmentActivity + Health-Connect manifest entries the
+        # `health` package needs (android/ is regenerated above, so this reapplies them).
+        run: python3 tool/health_connect_android.py android
+
       - name: Cache Gradle (now that android/ exists — speeds up later builds)
         uses: actions/cache@v4
         with:

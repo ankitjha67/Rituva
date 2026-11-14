@@ -18,6 +18,7 @@ dependencies:
   pdf: ^3.11.1               # on-device PDF generation (weekly plan + grocery export)
   printing: ^5.13.2          # native share / print sheet for the generated PDF
   mobile_scanner: ^5.2.3     # camera barcode scanning → Open Food Facts lookup
+  health: ^11.1.1            # Health Connect: steps/active energy → measured TDEE
 
 dev_dependencies:
   flutter_test:
