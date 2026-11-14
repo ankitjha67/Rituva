@@ -11,20 +11,11 @@ name: Build Android APK
 on:
   push:
     branches: [ main ]
-    paths-ignore:      # backend/docs-only changes don't need a 20-min APK rebuild
-      - "**.md"
-      - "docs/**"
-      - "design/**"
-      - "rituva/**"
-      - "tests/**"
-      - "deploy/**"
-      - "scripts/**"
-      - "Dockerfile"
-      - ".dockerignore"
-      - ".env.example"
+    paths:             # only the app itself rebuilds the APK (not backend/docs/CI)
+      - "mobile/**"
   release:
     types: [ published ]
-  workflow_dispatch:
+  workflow_dispatch:   # manual trigger for workflow/tooling changes
 
 permissions:
   contents: write

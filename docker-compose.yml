@@ -1,0 +1,28 @@
+# Local Postgres 16 + pgvector for Rituva's optional backend (PRD §12.3).
+#
+#   docker compose up -d
+#   pip install "psycopg[binary]"
+#   RITUVA_DB=postgresql://postgres:rituva@localhost:5433/rituva uvicorn rituva.api:app
+#
+# With RITUVA_DB set, store.py persists members/plans/intake in Postgres and the
+# hybrid retriever's dense channel moves to pgvector (rituva/pgvector_index.py).
+# Unset it and everything falls back to SQLite + in-memory retrieval — no server
+# needed. The standalone mobile app uses neither.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_PASSWORD: rituva
+      POSTGRES_DB: rituva
+    ports:
+      - "5433:5432"
+    volumes:
+      - rituva_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  rituva_pg:

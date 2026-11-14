@@ -9,12 +9,29 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    services:
+      # Postgres + pgvector so the optional backend (store + dense retrieval) is
+      # exercised live, not just mocked (PRD §12.3).
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: rituva
+          POSTGRES_DB: rituva
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
       - name: Install deps
-        run: pip install fastapi uvicorn httpx pytest openpyxl
-      - name: Run tests
+        run: pip install fastapi uvicorn httpx pytest openpyxl "psycopg[binary]"
+      - name: Run tests (SQLite default)
         run: python -m pytest tests/ -q
+      - name: Run Postgres + pgvector tests
+        env:
+          RITUVA_DB: postgresql://postgres:rituva@localhost:5432/rituva
+        run: python -m pytest tests/test_pgvector.py -q

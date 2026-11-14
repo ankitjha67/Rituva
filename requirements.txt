@@ -22,6 +22,8 @@ pytest>=8.0          # test runner (tests also run standalone without it)
 # standard library (urllib) — no vendor SDK needed. Configure a key on Settings:
 #   NVIDIA build.nvidia.com  ->  https://integrate.api.nvidia.com/v1  (PRD §10.5)
 #   Local models             ->  Ollama (https://ollama.com)
-# Optional richer retrieval (PRD §12.3): pgvector + rank_bm25 / sentence-transformers.
-# Optional Postgres backend for store.py (PRD §12.3): psycopg[binary]>=3.1
-#   (only needed when RITUVA_DB=postgresql://...; SQLite needs nothing extra)
+# Optional Postgres + pgvector backend (PRD §12.3): pip install "psycopg[binary]"
+#   Set RITUVA_DB=postgresql://user:pw@host/db and store.py persists to Postgres while
+#   the hybrid retriever's dense channel moves to pgvector (rituva/pgvector_index.py).
+#   `docker compose up -d` brings up Postgres 16 + pgvector locally. SQLite + in-memory
+#   retrieval remain the zero-dependency default; the standalone mobile app uses neither.

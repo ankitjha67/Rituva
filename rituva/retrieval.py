@@ -142,11 +142,28 @@ def _fuse(rankings: List[Dict[int, float]]) -> List[int]:
     return [i for i, _ in sorted(rrf.items(), key=lambda kv: -kv[1])]
 
 
+def _make_dense(docs: List[Doc]):
+    """Dense channel. Uses pgvector when a Postgres backend is configured
+    (`RITUVA_DB=postgresql://...`) and the extension is reachable; otherwise the
+    dependency-free in-memory TF-IDF cosine. Any failure falls back silently so
+    the engine always has a working dense channel."""
+    import os
+    dsn = os.environ.get("RITUVA_DB", "")
+    if dsn.startswith(("postgresql://", "postgres://")):
+        try:
+            from . import store
+            from .pgvector_index import PgVectorDense
+            return PgVectorDense(store.connect(dsn), docs)
+        except Exception:
+            pass  # pg/pgvector unavailable → in-memory dense
+    return _TfIdfCosine(docs)
+
+
 class _HybridIndex:
     def __init__(self, docs: List[Doc]):
         self.docs = docs
         self.sparse = _BM25(docs)
-        self.dense = _TfIdfCosine(docs)
+        self.dense = _make_dense(docs)
 
     def search(self, query: str, kind: Optional[str] = None, top: int = 5) -> List[Doc]:
         fused = _fuse([self.sparse.score(query), self.dense.score(query)])
