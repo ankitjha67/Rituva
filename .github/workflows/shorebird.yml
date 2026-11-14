@@ -1,0 +1,68 @@
+name: Shorebird code push (OTA)
+
+# Optional over-the-air patching via Shorebird (https://shorebird.dev) — ship Dart
+# fixes to installed apps without a new APK. This workflow is INERT until you
+# activate it (so it stays green and does nothing by default):
+#
+#   1. Install the Shorebird CLI, then from mobile/: `shorebird init`
+#      → creates mobile/shorebird.yaml with your app_id. Commit that file.
+#   2. `shorebird login:ci` → add the printed token as the repo secret
+#      SHOREBIRD_TOKEN (Settings → Secrets and variables → Actions).
+#   3. Cut one patchable release and distribute that APK to users:
+#      `shorebird release android` (replaces the plain build-apk.yml APK for OTA users).
+#
+# After that, every push to main under mobile/ publishes an OTA patch to that
+# release. Without the secret, the job short-circuits to a one-line notice.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "mobile/**"
+  workflow_dispatch:
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    env:
+      SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Status
+        run: |
+          if [ -n "$SHOREBIRD_TOKEN" ]; then
+            echo "Shorebird token present — will build and OTA-patch."
+          else
+            echo "Shorebird inactive. Add the SHOREBIRD_TOKEN secret and commit mobile/shorebird.yaml to enable OTA code push."
+          fi
+
+      - uses: actions/checkout@v4
+        if: ${{ env.SHOREBIRD_TOKEN != '' }}
+      - uses: actions/setup-java@v4
+        if: ${{ env.SHOREBIRD_TOKEN != '' }}
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: shorebirdtech/setup-shorebird@v1
+        if: ${{ env.SHOREBIRD_TOKEN != '' }}
+
+      - name: Scaffold android/ + ios/ (gitignored, like build-apk.yml)
+        if: ${{ env.SHOREBIRD_TOKEN != '' }}
+        run: |
+          flutter create --platforms=android,ios --org io.rituva --project-name rituva /tmp/scaffold
+          cp -r /tmp/scaffold/android ./android
+          cp -r /tmp/scaffold/ios ./ios
+          sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application android:usesCleartextTraffic="true"#' android/app/src/main/AndroidManifest.xml
+
+      - name: Install packages + generate icons/splash
+        if: ${{ env.SHOREBIRD_TOKEN != '' }}
+        run: |
+          flutter pub get
+          dart run flutter_launcher_icons
+          dart run flutter_native_splash:create
+
+      - name: OTA patch the current release
+        if: ${{ env.SHOREBIRD_TOKEN != '' }}
+        run: shorebird patch android --no-confirm
