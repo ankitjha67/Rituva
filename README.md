@@ -93,8 +93,9 @@ uvicorn rituva.api:app --reload   # API docs at /docs · app at http://localhost
 | PWA frontend on the approved design (served at `/app`) | ✅ | `web/` |
 | Grocery list (categorized, household-scaled) | ✅ | `rituva/grocery.py` (+ API + PWA/app) |
 | .xlsx export (Excel parity, G7) | ✅ | `rituva/export.py` (+ API + PWA) |
-| Native Android app (Flutter) — **standalone**: on-device engine, menus/swaps/recipes/grocery, animated analytics, a **multi-provider AI assistant** (OpenAI/Anthropic/Gemini/NVIDIA/Groq/Ollama/…), **on-device PDF/print export**, and **barcode → Open Food Facts** lookup, all offline | ✅ | `mobile/` (see `mobile/README.md`) |
-| Live Postgres/pgvector · wearables (Health Connect) · OTA code-push | ⏳ next | — (PRD §12, §18.4, §19) |
+| Native Android app (Flutter) — **standalone**: on-device engine, menus/swaps/recipes/grocery, animated analytics, a **multi-provider AI assistant** (OpenAI/Anthropic/Gemini/NVIDIA/Groq/Ollama/…), **on-device PDF/print export**, **barcode → Open Food Facts** lookup, and **Health Connect** (steps → measured energy target), all offline | ✅ | `mobile/` (see `mobile/README.md`) |
+| Live **Postgres + pgvector** backend (optional) · **Shorebird** OTA code-push (opt-in) | ✅ | `docker-compose.yml` · `.github/workflows/shorebird.yml` |
+| iOS release · deeper diet-quality indices (HEI/DASH/MDD-W) · CGM glycemic analytics · sustainability footprint | ⏳ next | see [`FEATURE_IDEAS.md`](FEATURE_IDEAS.md) |
 
 ## How the requirements map to code
 
