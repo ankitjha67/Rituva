@@ -93,7 +93,7 @@ uvicorn rituva.api:app --reload   # API docs at /docs · app at http://localhost
 | PWA frontend on the approved design (served at `/app`) | ✅ | `web/` |
 | Grocery list (categorized, household-scaled) | ✅ | `rituva/grocery.py` (+ API + PWA/app) |
 | .xlsx export (Excel parity, G7) | ✅ | `rituva/export.py` (+ API + PWA) |
-| Native Android app (Flutter) — **standalone**: on-device engine, menus/swaps/recipes/grocery, animated analytics, NVIDIA assistant, **on-device PDF/print export**, and **barcode → Open Food Facts** lookup, all offline | ✅ | `mobile/` (see `mobile/README.md`) |
+| Native Android app (Flutter) — **standalone**: on-device engine, menus/swaps/recipes/grocery, animated analytics, a **multi-provider AI assistant** (OpenAI/Anthropic/Gemini/NVIDIA/Groq/Ollama/…), **on-device PDF/print export**, and **barcode → Open Food Facts** lookup, all offline | ✅ | `mobile/` (see `mobile/README.md`) |
 | Live Postgres/pgvector · wearables (Health Connect) · OTA code-push | ⏳ next | — (PRD §12, §18.4, §19) |
 
 ## How the requirements map to code
@@ -145,7 +145,7 @@ runs **fully standalone** — planning, swaps, recipes, grocery lists and animat
 analytics are all computed on the phone, offline. No server, no account.
 
 - **Direct download:** the newest build is attached to the **[latest release](https://github.com/ankitjha67/Rituva/releases/latest)** as `Rituva-*.apk`. On Android, enable "install unknown apps" and open the file. It ships the public curated library (~95 foods / 94 recipes).
-- **Bring your own assistant key:** the in-app chat assistant runs **directly on NVIDIA**, no server. Get a free key at [build.nvidia.com](https://build.nvidia.com) and paste it in **Profile → Assistant** (stored only on your phone). Leave it blank and the deterministic engine still does everything except free-form chat.
+- **Bring your own assistant key — any provider:** the in-app chat assistant runs **directly on the LLM provider you pick**, no server. **Profile → Assistant** offers OpenAI, Anthropic (Claude), Google Gemini, NVIDIA, Groq, OpenRouter, Mistral, DeepSeek, Together, local **Ollama**, self-hosted **NVIDIA NIM**, and any custom OpenAI-compatible endpoint — enter the key (and base URL/model for local/self-hosted), stored only on your phone. Leave it unset and the deterministic engine still does everything except free-form chat.
 - **Update flow:** every push/merge to `main` that touches `mobile/**` rebuilds the APK and refreshes the `latest` prerelease. The first CI run takes ~15–20 min; later runs are faster (Flutter + Gradle caches).
 - **Optional dev backend:** the app needs no server, but a developer can bake one in with the repo **Variable** `RITUVA_API` (e.g. `https://your-host`) and deploy `rituva.api:app` (`uvicorn`/Docker). There is no in-app server setting.
 - **True over-the-air code push** (patch the running app without a new APK) is wired via **[Shorebird](https://shorebird.dev)** in [`.github/workflows/shorebird.yml`](.github/workflows/shorebird.yml) — it stays inert until you activate it: `shorebird init` (commit `mobile/shorebird.yaml`), add the `SHOREBIRD_TOKEN` repo secret, and cut one `shorebird release android`; after that, pushes to `main` under `mobile/**` OTA-patch installed apps.
