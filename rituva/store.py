@@ -190,6 +190,11 @@ def get_member(conn: _DB, member_id: str) -> Optional[Member]:
     return member_from_dict(json.loads(rows[0]["data"])) if rows else None
 
 
+def delete_member(conn: _DB, member_id: str) -> None:
+    conn.execute("DELETE FROM members WHERE id=?", (member_id,))
+    conn.commit()
+
+
 def list_members(conn: _DB) -> List[Member]:
     return [member_from_dict(json.loads(r["data"]))
             for r in conn.execute("SELECT data FROM members ORDER BY id")]

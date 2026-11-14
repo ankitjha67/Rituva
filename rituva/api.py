@@ -162,6 +162,22 @@ def read_member(member_id: str):
     return store.member_to_dict(m)
 
 
+@app.delete("/members/{member_id}")
+def delete_member(member_id: str):
+    """Remove a profile. Rejected if it is the only one left, so the app always
+    has at least one member to plan for."""
+    conn = _conn()
+    try:
+        if store.get_member(conn, member_id) is None:
+            raise HTTPException(404, "member not found")
+        if len(store.list_members(conn)) <= 1:
+            raise HTTPException(409, "cannot delete the last remaining profile")
+        store.delete_member(conn, member_id)
+        return {"deleted": member_id}
+    finally:
+        conn.close()
+
+
 @app.get("/members/{member_id}/targets")
 def read_targets(member_id: str):
     conn = _conn()

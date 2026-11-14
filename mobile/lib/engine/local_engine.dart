@@ -121,6 +121,19 @@ class LocalEngine {
     return m;
   }
 
+  /// Delete a profile by id, on device. Rejects deleting the last one so the app
+  /// always has at least one member to plan for (which would otherwise leave an
+  /// empty list that re-seeds the defaults on next read).
+  Future<void> deleteMember(String id) async {
+    final p = await SharedPreferences.getInstance();
+    final all = [...await members()];
+    if (all.length <= 1) {
+      throw Exception('Add another profile before deleting this one.');
+    }
+    all.removeWhere((x) => x['id'] == id);
+    await p.setString(_membersKey, jsonEncode(all));
+  }
+
   Future<Map<String, dynamic>> targets(String id) async =>
       computeTargets(await member(id));
 

@@ -356,6 +356,12 @@ class RituvaApi {
         () => local.saveMember(m),
       );
 
+  /// Delete a member profile by id, on the server or on the device.
+  Future<void> deleteMember(String id) async => _tryServer(
+        () async => _delete('/members/$id', const {}),
+        () => local.deleteMember(id),
+      );
+
   /// Ask the LLM about a day's meals. The one genuinely server-only feature: running a
   /// language model needs the backend, and the app will not fake an answer offline.
   Future<String> ask(String id, String question, {String? planId, String? date}) async {

@@ -392,6 +392,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Delete the current profile (any profile, including the built-in defaults),
+  /// after a confirm. Switches to a remaining profile so the app never lands on
+  /// an empty household.
+  Future<void> _deleteProfile(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (widget.members.length <= 1) {
+      messenger.showSnackBar(const SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text('Add another profile before deleting this one.'),
+      ));
+      return;
+    }
+    final name = '${widget.member['name']}';
+    final deletedId = widget.memberId;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: R.bg2,
+        title: const Text('Delete profile?'),
+        content: Text(
+            "$name's profile and saved details will be removed from this phone. This can't be undone."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: R.magenta, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await widget.api.deleteMember(deletedId);
+      // Hand off to a remaining profile; the parent reloads the whole app for it.
+      final remaining = widget.members.firstWhere((m) => m['id'] != deletedId);
+      await widget.onSwitch(remaining['id'] as String);
+      messenger.showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text("Deleted $name's profile."),
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text('$e'),
+      ));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final prov = (widget.plan['provenance'] as Map?) ?? {};
@@ -451,6 +500,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ]),
+        // Delete the current profile (defaults included). Hidden when it's the
+        // only one left, since the app must keep at least one member.
+        if (widget.members.length > 1) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => _deleteProfile(context),
+              style: TextButton.styleFrom(foregroundColor: R.magenta),
+              icon: const Icon(Icons.delete_outline, size: 18),
+              label: Text("Delete ${widget.member['name']}'s profile"),
+            ),
+          ),
+        ],
         const SizedBox(height: 18),
         // ---- On-device library ----
         const Text('LIBRARY',
