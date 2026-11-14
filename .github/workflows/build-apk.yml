@@ -84,6 +84,18 @@ jobs:
         # branded to hold.
         run: dart run flutter_native_splash:create
 
+      - name: Disable release lint
+        # `flutter build apk --release` runs lintVitalAnalyzeRelease, which crashes
+        # ("Unexpected failure during lint analysis … a bug in lint") on a transitive
+        # plugin lib with the current AGP. We don't gate releases on lint, so turn it
+        # off in the freshly scaffolded app module (Kotlin DSL, with a Groovy fallback).
+        run: |
+          if [ -f android/app/build.gradle.kts ]; then
+            sed -i '/^android {/a\    lint { checkReleaseBuilds = false; abortOnError = false }' android/app/build.gradle.kts
+          elif [ -f android/app/build.gradle ]; then
+            sed -i '/^android {/a\    lint { checkReleaseBuilds false ; abortOnError false }' android/app/build.gradle
+          fi
+
       - name: Build release APK
         run: |
           flutter build apk --release \
