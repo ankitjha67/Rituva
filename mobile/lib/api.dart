@@ -28,7 +28,10 @@ class OfflineException implements Exception {
 /// APK is usable with no backend at all.
 class RituvaApi {
   static const _prefKey = 'rituva_server_url';
-  static const _nvKeyPref = 'rituva_nvidia_key';
+  static const _providerPref = 'rituva_llm_provider';
+  static String _llmKeyPref(String id) => 'rituva_llm_key_$id';
+  static String _llmBasePref(String id) => 'rituva_llm_base_$id';
+  static String _llmModelPref(String id) => 'rituva_llm_model_$id';
   // Emulator/simulator host aliases differ: the Android emulator reaches the host's
   // Standalone by default: no server unless one is baked at build
   // (`--dart-define=RITUVA_API=https://your-host`) or set in Profile. With no server the
@@ -37,14 +40,19 @@ class RituvaApi {
   static final String _default = _resolveDefault();
   static String _resolveDefault() => String.fromEnvironment('RITUVA_API', defaultValue: '');
 
-  // The NVIDIA key for the standalone LLM path (direct from the app, no server). Baked at
-  // build via `--dart-define=RITUVA_NVIDIA_KEY=...`, overridable in Profile → Assistant.
+  // A build may bake an NVIDIA key via `--dart-define=RITUVA_NVIDIA_KEY=...`; it seeds the
+  // NVIDIA provider so a dev build works out of the box. Public builds bake none — the user
+  // picks any provider (frontier, local, NIM, …) and enters their own key in Profile →
+  // Assistant. See kLlmProviders in engine/llm.dart.
   static const _bakedNvKey = String.fromEnvironment('RITUVA_NVIDIA_KEY', defaultValue: '');
 
   static const _timeout = Duration(seconds: 15);   // headroom for the LLM-bearing /plans call
 
   String baseUrl;
-  String nvidiaKey = _bakedNvKey;
+  String providerId = 'nvidia';           // selected assistant provider
+  final Map<String, String> _keys = {};   // providerId -> API key
+  final Map<String, String> _bases = {};  // providerId -> base-URL override (local/self-hosted)
+  final Map<String, String> _models = {}; // providerId -> model override
   bool offline = false;  // true once any call has fallen back to the on-device engine
 
   /// The on-device planner. Answers every read the app makes, using the bundled
@@ -59,19 +67,28 @@ class RituvaApi {
   /// still point a build at the backend with `--dart-define=RITUVA_API=…`.) Restores the
   /// saved NVIDIA key and points the engine at a previously downloaded library if present.
   static Future<RituvaApi> create() async {
-    var nvKey = _bakedNvKey;
+    final api = RituvaApi._(_default);
     try {
       final p = await SharedPreferences.getInstance();
       await p.remove(_prefKey);   // standalone: drop any server URL a previous build saved
-      final nv = p.getString(_nvKeyPref);
-      if (nv != null && nv.trim().isNotEmpty) nvKey = nv.trim();
+      // Migrate the old single-NVIDIA-key pref, then load per-provider settings.
+      final legacy = p.getString('rituva_nvidia_key');
+      if (legacy != null && legacy.trim().isNotEmpty) api._keys['nvidia'] = legacy.trim();
+      final sel = p.getString(_providerPref);
+      if (sel != null && sel.isNotEmpty) api.providerId = sel;
+      for (final prov in kLlmProviders) {
+        final k = p.getString(_llmKeyPref(prov.id));
+        if (k != null && k.isNotEmpty) api._keys[prov.id] = k;
+        final b = p.getString(_llmBasePref(prov.id));
+        if (b != null && b.isNotEmpty) api._bases[prov.id] = b;
+        final m = p.getString(_llmModelPref(prov.id));
+        if (m != null && m.isNotEmpty) api._models[prov.id] = m;
+      }
     } catch (_) {/* prefs unavailable → defaults */}
     try {
       final dir = await getApplicationDocumentsDirectory();
       KB.downloadPath = '${dir.path}/rituva_kb_full.json';
     } catch (_) {/* no writable dir → bundled KB only */}
-    final api = RituvaApi._(_default);
-    api.nvidiaKey = nvKey;
     return api;
   }
 
@@ -79,17 +96,54 @@ class RituvaApi {
   Future<Map<String, dynamic>> libraryInfo() => local.info();
 
   // ------------------------------------------------------- the assistant ----
-  /// Whether the in-app LLM assistant can run (an NVIDIA key is configured). When true,
-  /// the assistant works fully standalone — no backend server is involved.
-  bool get hasLLM => nvidiaKey.trim().isNotEmpty;
+  /// The resolved config for the selected provider (key/base/model, with the baked
+  /// NVIDIA key and the provider's defaults filled in).
+  LlmConfig llmConfig() {
+    final p = providerById(providerId);
+    final key = (_keys[p.id]?.trim().isNotEmpty ?? false)
+        ? _keys[p.id]!.trim()
+        : (p.id == 'nvidia' ? _bakedNvKey.trim() : '');
+    final base = (_bases[p.id]?.trim().isNotEmpty ?? false) ? _bases[p.id]!.trim() : p.base;
+    final model = (_models[p.id]?.trim().isNotEmpty ?? false) ? _models[p.id]!.trim() : p.model;
+    return LlmConfig(p, key, base, model);
+  }
 
-  /// Persist the NVIDIA key (empty resets to the build-baked key, if any).
-  Future<void> setNvidiaKey(String key) async {
-    final v = key.trim();
-    nvidiaKey = v.isEmpty ? _bakedNvKey : v;
+  /// Whether the in-app assistant can run with the current provider, key and base URL.
+  /// When true it works fully standalone — no backend server is involved.
+  bool get hasLLM => llmConfig().ready;
+
+  // Per-provider settings surfaced to Profile → Assistant.
+  String llmKey(String id) => _keys[id] ?? (id == 'nvidia' ? _bakedNvKey : '');
+  String llmBase(String id) => _bases[id] ?? '';
+  String llmModel(String id) => _models[id] ?? '';
+
+  Future<void> setLlmProvider(String id) async {
+    providerId = id;
+    await _putPref(_providerPref, id);
+  }
+
+  Future<void> setLlmSettings(String id, {String? key, String? base, String? model}) async {
+    if (key != null) {
+      _setMap(_keys, id, key);
+      await _putPref(_llmKeyPref(id), key);
+    }
+    if (base != null) {
+      _setMap(_bases, id, base);
+      await _putPref(_llmBasePref(id), base);
+    }
+    if (model != null) {
+      _setMap(_models, id, model);
+      await _putPref(_llmModelPref(id), model);
+    }
+  }
+
+  void _setMap(Map<String, String> m, String id, String v) =>
+      v.trim().isEmpty ? m.remove(id) : m[id] = v.trim();
+
+  Future<void> _putPref(String key, String v) async {
     try {
       final p = await SharedPreferences.getInstance();
-      v.isEmpty ? await p.remove(_nvKeyPref) : await p.setString(_nvKeyPref, v);
+      v.trim().isEmpty ? await p.remove(key) : await p.setString(key, v.trim());
     } catch (_) {}
   }
 
@@ -111,7 +165,8 @@ class RituvaApi {
   /// The intelligent assistant. Grounded in the member's profile, health, daily targets,
   /// the whole week's menu and engine-computed iso-nutrient alternatives for its dishes.
   /// The LLM reasons and suggests; every number and candidate dish is supplied by the
-  /// deterministic engine, never invented by the model. Runs standalone via [NvidiaLLM].
+  /// deterministic engine, never invented by the model. Runs standalone via [llmChat]
+  /// against whichever provider is selected in Profile → Assistant.
   Future<String> assistant(
     String question, {
     required Map<String, dynamic> member,
@@ -125,10 +180,10 @@ class RituvaApi {
         ? ''
         : '\n\nEarlier in this chat:\n${history.map((m) => "${m['role'] == 'you' ? 'User' : 'You'}: ${m['text']}").join('\n')}';
     final user = '$ctx$convo\n\nUser: $question';
-    // Per-model timeout. The free-tier survivor (gpt-oss-20b, a reasoning model) can take
-    // ~50s on a big prompt; retired models fail in 0.1s (HTTP 410) so they cost nothing to
-    // skip, which keeps the walk fast despite the long cap. Winner cache ⇒ one attempt next time.
-    return NvidiaLLM(nvidiaKey).chat(_assistantSystem, user, timeout: const Duration(seconds: 60));
+    // Generous cap: some free/reasoning models take ~50s on a big prompt, and for
+    // discovery-capable providers retired models fail in ~0.1s (404/410) so skipping
+    // them is cheap. The winner cache makes the common case a single fast attempt.
+    return llmChat(llmConfig(), _assistantSystem, user, timeout: const Duration(seconds: 60));
   }
 
   /// Build the grounded context block: who the member is, their targets, the week's menu,

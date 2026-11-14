@@ -10,6 +10,7 @@ import 'screens/health.dart';
 import 'screens/profile_edit.dart';
 import 'screens/meal_chat.dart';
 import 'screens/scan_screen.dart';
+import 'engine/llm.dart';
 
 void main() {
   // Hold the native splash until the first loaded frame paints, so the Today
@@ -160,7 +161,7 @@ class _HomeShellState extends State<HomeShell> {
     final a = api;
     if (a == null || plan == null || member == null || targets == null) return;
     if (!a.hasLLM) {
-      _snack('Add your NVIDIA key in Profile → Assistant to chat.');
+      _snack('Choose an LLM provider and add your key in Profile → Assistant to chat.');
       return;
     }
     showModalBottomSheet(
@@ -354,7 +355,10 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  late final TextEditingController keyCtrl = TextEditingController(text: widget.api.nvidiaKey);
+  late String _provId = widget.api.providerId;
+  late final TextEditingController keyCtrl = TextEditingController(text: widget.api.llmKey(_provId));
+  late final TextEditingController baseCtrl = TextEditingController(text: widget.api.llmBase(_provId));
+  late final TextEditingController modelCtrl = TextEditingController(text: widget.api.llmModel(_provId));
   bool _showKey = false;
   Map<String, dynamic>? lib;
 
@@ -374,17 +378,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     keyCtrl.dispose();
+    baseCtrl.dispose();
+    modelCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _saveKey() async {
-    await widget.api.setNvidiaKey(keyCtrl.text);
+  // Switch provider: repopulate the fields with that provider's saved settings.
+  void _onProvider(String id) => setState(() {
+        _provId = id;
+        keyCtrl.text = widget.api.llmKey(id);
+        baseCtrl.text = widget.api.llmBase(id);
+        modelCtrl.text = widget.api.llmModel(id);
+      });
+
+  Future<void> _saveAssistant() async {
+    await widget.api.setLlmProvider(_provId);
+    await widget.api.setLlmSettings(_provId,
+        key: keyCtrl.text, base: baseCtrl.text, model: modelCtrl.text);
     if (mounted) {
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         behavior: SnackBarBehavior.floating,
-        content: Text(widget.api.hasLLM ? 'Assistant key saved.' : 'Assistant key cleared.'),
+        content: Text(widget.api.hasLLM ? 'Assistant saved.' : 'Assistant settings cleared.'),
       ));
+    }
+  }
+
+  String _assistantHint(LlmProvider p) {
+    switch (p.id) {
+      case 'nvidia':
+        return 'Free key at build.nvidia.com. Stored only on this phone.';
+      case 'openai':
+        return 'Key from platform.openai.com. Stored only on this phone.';
+      case 'anthropic':
+        return 'Key from console.anthropic.com. Stored only on this phone.';
+      case 'gemini':
+        return 'Key from aistudio.google.com. Stored only on this phone.';
+      case 'ollama':
+        return "Run Ollama locally; set its URL (on Android use your PC's LAN IP). No key needed.";
+      case 'nim':
+        return 'Point at your self-hosted NVIDIA NIM endpoint (…/v1). Key optional.';
+      case 'custom':
+        return 'Any OpenAI-compatible endpoint (Groq, LM Studio, vLLM, …): set base URL + model.';
+      default:
+        return 'Key stored only on this phone. Leave blank to turn the assistant off.';
     }
   }
 
@@ -554,62 +591,100 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         const SizedBox(height: 18),
-        // ---- Assistant (NVIDIA key, standalone LLM) ----
+        // ---- Assistant (any LLM provider; standalone, no server) ----
         const Text('ASSISTANT', style: TextStyle(color: R.muted, fontSize: 11, letterSpacing: 1.2)),
         const SizedBox(height: 8),
-        Card(
-          color: R.surface,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Icon(widget.api.hasLLM ? Icons.auto_awesome : Icons.auto_awesome_outlined,
-                      size: 16, color: widget.api.hasLLM ? R.green : R.muted),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      widget.api.hasLLM
-                          ? 'Assistant ready — it runs directly on NVIDIA, no server needed.'
-                          : 'Add your NVIDIA API key to enable the in-app assistant.',
-                      style: TextStyle(
-                          color: widget.api.hasLLM ? R.green : R.muted, fontSize: 12),
+        Builder(builder: (context) {
+          final prov = providerById(_provId);
+          return Card(
+            color: R.surface,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Icon(widget.api.hasLLM ? Icons.auto_awesome : Icons.auto_awesome_outlined,
+                        size: 16, color: widget.api.hasLLM ? R.green : R.muted),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        widget.api.hasLLM
+                            ? 'Assistant ready — runs directly on ${prov.name}, no server.'
+                            : 'Pick a provider and add your key to enable the assistant.',
+                        style: TextStyle(color: widget.api.hasLLM ? R.green : R.muted, fontSize: 12),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 12),
+                  InputDecorator(
+                    decoration: const InputDecoration(labelText: 'Provider', isDense: true),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        isExpanded: true,
+                        value: _provId,
+                        dropdownColor: R.bg2,
+                        items: [
+                          for (final p in kLlmProviders)
+                            DropdownMenuItem(value: p.id, child: Text(p.name))
+                        ],
+                        onChanged: (v) => v == null ? null : _onProvider(v),
+                      ),
                     ),
                   ),
-                ]),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: keyCtrl,
-                  obscureText: !_showKey,
-                  decoration: InputDecoration(
-                    labelText: 'NVIDIA API key',
-                    hintText: 'nvapi-…',
-                    suffixIcon: IconButton(
-                      icon: Icon(_showKey ? Icons.visibility_off : Icons.visibility, size: 18),
-                      onPressed: () => setState(() => _showKey = !_showKey),
+                  if (prov.needsKey || prov.id == 'nim' || prov.id == 'custom') ...[
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: keyCtrl,
+                      obscureText: !_showKey,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        labelText: prov.needsKey ? 'API key' : 'API key (optional)',
+                        hintText: prov.keyHint,
+                        suffixIcon: IconButton(
+                          icon: Icon(_showKey ? Icons.visibility_off : Icons.visibility, size: 18),
+                          onPressed: () => setState(() => _showKey = !_showKey),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (prov.userBase) ...[
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: baseCtrl,
+                      keyboardType: TextInputType.url,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        labelText: 'Base URL',
+                        hintText: prov.id == 'ollama' ? 'http://10.0.2.2:11434/v1' : 'https://host/v1',
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: modelCtrl,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      labelText: 'Model (optional)',
+                      hintText: prov.model.isEmpty ? 'e.g. llama3.2' : prov.model,
                     ),
                   ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Get a free key at build.nvidia.com. Stored only on this phone — it powers the '
-                  'chat assistant. Leave blank to turn the assistant off.',
-                  style: TextStyle(color: R.muted, fontSize: 11),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _saveKey,
-                    icon: const Icon(Icons.save_outlined, size: 18),
-                    label: const Text('Save key'),
+                  const SizedBox(height: 6),
+                  Text(_assistantHint(prov), style: const TextStyle(color: R.muted, fontSize: 11)),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _saveAssistant,
+                      icon: const Icon(Icons.save_outlined, size: 18),
+                      label: const Text('Save assistant'),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        }),
         const SizedBox(height: 18),
         Card(
           color: R.surface,

@@ -76,7 +76,7 @@ class _MealChatSheetState extends State<MealChatSheet> {
       setState(() => msgs.add({'role': 'ai', 'text': a}));
     } catch (e) {
       final msg = e is OfflineException
-          ? 'Add your NVIDIA key in Profile → Assistant to use the assistant.'
+          ? 'Choose an LLM provider and add your key in Profile → Assistant to use the assistant.'
           : 'The assistant is busy right now — please try again in a moment.';
       setState(() => msgs.add({'role': 'ai', 'text': msg}));
     } finally {
