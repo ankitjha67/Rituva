@@ -16,9 +16,17 @@ Full specification: [`PRD.md`](PRD.md). Visual design: [`design/prototype.html`]
 ## The one rule that shapes the architecture
 
 > **The LLM proposes; the deterministic engine disposes.**
-> Every nutrient value is *computed* from the Knowledge DB (IFCT 2017 composition),
+> Every nutrient value is *computed* from the Knowledge DB (food-composition data),
 > never produced by a language model. An ingredient missing from the DB is flagged,
 > not fabricated. See PRD §9.2.
+
+> **Knowledge base & data licence.** This public repo ships a **curated composition
+> database (~95 foods / 94 recipes)** that is safe to redistribute. The full
+> **IFCT 2017** tables (ICMR-NIN; ~601 foods / 1302 recipes) are **personal-use
+> licensed** — they are *not* included here and must not be, without written NIN
+> permission. The engine loads them automatically if you place the extraction locally
+> (`rituva/ifct_local.py`, gitignored); otherwise it falls back to the curated set. So
+> a clone builds and runs out of the box on the public data.
 
 ## Quick start (no dependencies, no API key)
 
@@ -52,7 +60,7 @@ Run the full app — REST API **and** the installable PWA on the approved design
 uvicorn rituva.api:app --reload   # API docs at /docs · app at http://localhost:8000/app/
 ```
 
-## What runs today (this scaffold)
+## What runs today
 
 | Area | Status | Module |
 |---|---|---|
@@ -71,7 +79,7 @@ uvicorn rituva.api:app --reload   # API docs at /docs · app at http://localhost
 | Food logging + adherence (actuals vs plan) | ✅ | `rituva/adherence.py` (+ API) |
 | PWA frontend on the approved design (served at `/app`) | ✅ | `web/` |
 | Grocery list (categorized, household-scaled) | ✅ | `rituva/grocery.py` (+ API + PWA/app) |
-| .xlsx export (Excel parity, G7) | ✅ | `rituva/export.py` (+ API + download buttons) |
+| .xlsx export (Excel parity, G7) | ✅ | `rituva/export.py` (+ API + PWA) |
 | Native Android app (Flutter) — **standalone**: on-device engine, menus/swaps/recipes/grocery, animated analytics, and an NVIDIA assistant, all offline | ✅ | `mobile/` (see `mobile/README.md`) |
 | Live Postgres/pgvector · barcode scanning · wearables (Health Connect) · on-device PDF/print · OTA code-push | ⏳ next | — (PRD §12, §18.4, §19) |
 
@@ -103,6 +111,8 @@ rituva/
   api.py          # FastAPI REST layer (+ mounts the PWA at /app)
   cli.py          # runnable CLI
 web/              # PWA frontend on the approved design (served at /app)
+mobile/           # Flutter standalone Android app (on-device engine; see mobile/README.md)
+scripts/export_kb.py  # build the bundled KB (`--public` = curated set only, no IFCT)
 tests/test_core.py · tests/test_api.py
 CONTEXT.md        # living build tracker — read this to resume
 PRD.md            # full product spec (v1.5)
@@ -117,9 +127,12 @@ clinician. See PRD §13.2.
 
 ## Download the Android app (APK) & how updates work
 
-The APK is built **in GitHub Actions** (no local Android/Flutter toolchain needed).
+The APK is built **in GitHub Actions** (no local Android/Flutter toolchain needed) and
+runs **fully standalone** — planning, swaps, recipes, grocery lists and animated
+analytics are all computed on the phone, offline. No server, no account.
 
-- **Direct download:** the newest build is always attached to the **[latest release](https://github.com/ankitjha67/Rituva/releases/latest)** as `Rituva-*.apk`. On Android, enable "install unknown apps" and open the file.
-- **Update flow:** every push/merge to `main` rebuilds the APK and refreshes the `latest` prerelease; publishing a versioned **Release** attaches a versioned APK to it. The first CI run takes ~15–20 min; later runs are faster (Flutter + Gradle caches). *There is no "partial" APK build — each version is a full APK, but caching makes rebuilds quick and each release carries only your new changes.*
-- **True over-the-air code push** (patch the running app without installing a new APK) is available via **[Shorebird](https://shorebird.dev)** for Flutter — ask to wire it up once you have a Shorebird token (added as a repo secret).
-- **Point the app at your backend:** set a repository **Variable** `RITUVA_API` (e.g. `https://your-host`) to bake it into the APK; otherwise it defaults to the emulator URL `http://10.0.2.2:8000`. Deploy `rituva.api:app` anywhere (`uvicorn`/Docker) and set that URL.
+- **Direct download:** the newest build is attached to the **[latest release](https://github.com/ankitjha67/Rituva/releases/latest)** as `Rituva-*.apk`. On Android, enable "install unknown apps" and open the file. It ships the public curated library (~95 foods / 94 recipes).
+- **Bring your own assistant key:** the in-app chat assistant runs **directly on NVIDIA**, no server. Get a free key at [build.nvidia.com](https://build.nvidia.com) and paste it in **Profile → Assistant** (stored only on your phone). Leave it blank and the deterministic engine still does everything except free-form chat.
+- **Update flow:** every push/merge to `main` that touches `mobile/**` rebuilds the APK and refreshes the `latest` prerelease. The first CI run takes ~15–20 min; later runs are faster (Flutter + Gradle caches).
+- **Optional dev backend:** the app needs no server, but a developer can bake one in with the repo **Variable** `RITUVA_API` (e.g. `https://your-host`) and deploy `rituva.api:app` (`uvicorn`/Docker). There is no in-app server setting.
+- **True over-the-air code push** (patch the running app without a new APK) is possible via **[Shorebird](https://shorebird.dev)** once a Shorebird token is added as a repo secret.
