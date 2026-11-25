@@ -69,6 +69,9 @@ class _HomeShellState extends State<HomeShell> {
       ctx = await a.context();
       members = await a.members();
       member = await a.member(memberId);
+      // Resolve to whoever actually exists (the default id may be gone — e.g. after
+      // deleting it, or on a fresh/clean-slate household) so targets + plan match.
+      memberId = '${member!['id']}';
       final t = await a.targets(memberId);
       targets = t['targets'] as Map<String, dynamic>;
       anthro = t['anthropometry'] as Map<String, dynamic>;
